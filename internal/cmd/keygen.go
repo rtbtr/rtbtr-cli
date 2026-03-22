@@ -74,5 +74,5 @@ func runKeygen(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
-	keygenCmd.Flags().BoolVarP(&forceFlag, "force", "", false, "overwrite existing key files")
+	keygenCmd.Flags().BoolVar(&forceFlag, "force", false, "overwrite existing key files")
 }
