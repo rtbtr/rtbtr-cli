@@ -63,7 +63,7 @@ func runKeygen(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("writing private key: %w", err)
 	}
 
-	if err := os.WriteFile(pubPath, []byte(pubB64), 0o644); err != nil {
+	if err := os.WriteFile(pubPath, []byte(pubB64), 0o600); err != nil {
 		return fmt.Errorf("writing public key: %w", err)
 	}
 
