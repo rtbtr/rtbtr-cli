@@ -1,0 +1,38 @@
+name: Refactor
+description: Code cleanup or restructuring with no behavior change
+labels: ["debt"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One sentence — the cleanup.
+    validations:
+      required: true
+
+  - type: textarea
+    id: in-scope
+    attributes:
+      label: In Scope
+      description: Files and changes included in this ticket.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of Scope
+      description: Related work NOT in this ticket.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Checkbox list. Must include "existing tests pass".
+      placeholder: |
+        - [ ] All existing tests pass unchanged
+        - [ ] `make check` passes
+    validations:
+      required: true

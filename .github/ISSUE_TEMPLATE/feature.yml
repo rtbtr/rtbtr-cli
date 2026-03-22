@@ -1,0 +1,68 @@
+name: Feature
+description: New command or capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One sentence — what this delivers.
+    validations:
+      required: true
+
+  - type: textarea
+    id: design
+    attributes:
+      label: Design
+      description: CLI interface, flags, behavior, and any implementation notes.
+      placeholder: |
+        ```
+        rtbtr keygen [--force]
+        ```
+        Generates Ed25519 keypair into the home directory.
+    validations:
+      required: true
+
+  - type: textarea
+    id: in-scope
+    attributes:
+      label: In Scope
+      description: Files and changes included in this ticket.
+    validations:
+      required: true
+
+  - type: textarea
+    id: out-of-scope
+    attributes:
+      label: Out of Scope
+      description: Related work NOT in this ticket.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests
+      description: Key test cases to cover.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: Checkbox list, binary pass/fail.
+      placeholder: |
+        - [ ] Command works as described
+        - [ ] Tests pass
+        - [ ] `make check` passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Ticket numbers or "None".
+    validations:
+      required: true

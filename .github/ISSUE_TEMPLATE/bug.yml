@@ -1,0 +1,58 @@
+name: Bug Report
+description: Something is broken
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: One sentence — what is broken.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Numbered steps to trigger the bug.
+      placeholder: |
+        1. Run `rtbtr --home /tmp/test keygen`
+        2. Run `rtbtr --home /tmp/test register`
+        3. Observe error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current Behavior
+      description: What happens now (include output/errors).
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, rtbtr version.
+      placeholder: |
+        - OS: macOS 15.1 / arm64
+        - rtbtr: v0.2.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: fix
+    attributes:
+      label: Proposed Fix
+      description: If known — what needs to change and where.
+    validations:
+      required: false
