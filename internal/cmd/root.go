@@ -5,6 +5,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var homeFlag string
+
 var rootCmd = &cobra.Command{
 	Use:   "rtbtr",
 	Short: "rtbtr — cryptographic identity and messaging toolkit",
@@ -25,5 +27,7 @@ func Execute() error {
 }
 
 func init() {
+	rootCmd.PersistentFlags().StringVar(&homeFlag, "home", "", "path to .rtbtr directory")
 	rootCmd.AddCommand(versionCmd)
+	rootCmd.AddCommand(keygenCmd)
 }
