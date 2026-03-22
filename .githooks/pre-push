@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -eu
+
+echo "Running pre-push checks..."
+
+# Stash uncommitted changes so we check exactly what's being pushed.
+needs_stash=false
+if ! git diff --quiet || ! git diff --cached --quiet; then
+    needs_stash=true
+    git stash push --include-untracked -m "pre-push-hook-stash" -q
+fi
+
+cleanup() {
+    if [ "$needs_stash" = true ]; then
+        git stash pop -q 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+make check
