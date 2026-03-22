@@ -67,4 +67,4 @@ GitHub Actions builds binaries for linux, macOS, and Windows (amd64 + arm64) and
 
 ## License
 
-TBD
+[MIT](LICENSE)
