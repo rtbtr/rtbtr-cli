@@ -7,7 +7,30 @@ import (
 	"path/filepath"
 )
 
+// FindDirUp walks up from startDir looking for a subdirectory named name.
+// It returns the full path and true if found, or empty string and false otherwise.
+func FindDirUp(startDir, name string) (string, bool) {
+	dir := startDir
+	for {
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate, true
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+		dir = parent
+	}
+}
+
 // Resolve returns the .rtbtr home directory path.
+//
+// If explicitHome is non-empty it is returned as-is without validation;
+// the caller is responsible for creating the directory if needed.
+// Otherwise, Resolve walks up from cwd looking for a .rtbtr/ subdirectory.
+// If none is found and allowCreate is true, .rtbtr/ is created in cwd.
 func Resolve(explicitHome string, allowCreate bool) (string, error) {
 	if explicitHome != "" {
 		return explicitHome, nil
@@ -18,20 +41,8 @@ func Resolve(explicitHome string, allowCreate bool) (string, error) {
 		return "", fmt.Errorf("getting working directory: %w", err)
 	}
 
-	dir := cwd
-	for {
-		candidate := filepath.Join(dir, ".rtbtr")
-		info, err := os.Stat(candidate)
-		if err == nil && info.IsDir() {
-			return candidate, nil
-		}
-
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-
-		dir = parent
+	if found, ok := FindDirUp(cwd, ".rtbtr"); ok {
+		return found, nil
 	}
 
 	if !allowCreate {

@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -41,11 +42,11 @@ func runKeygen(cmd *cobra.Command, args []string) error {
 
 	if !forceFlag {
 		if _, statErr := os.Stat(privPath); statErr == nil {
-			return fmt.Errorf("key files already exist, use --force to overwrite")
+			return fmt.Errorf("private key already exists at %s, use --force to overwrite", privPath)
 		}
 
 		if _, statErr := os.Stat(pubPath); statErr == nil {
-			return fmt.Errorf("key files already exist, use --force to overwrite")
+			return fmt.Errorf("public key already exists at %s, use --force to overwrite", pubPath)
 		}
 	}
 
@@ -62,15 +63,25 @@ func runKeygen(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("writing private key: %w", err)
 	}
 
-	if err := os.WriteFile(pubPath, []byte(pubB64), 0o600); err != nil {
+	if err := os.WriteFile(pubPath, []byte(pubB64), 0o644); err != nil {
 		return fmt.Errorf("writing public key: %w", err)
 	}
+
+	warnIfGitRepo(cmd.ErrOrStderr(), homeDir)
 
 	if _, err := fmt.Fprintln(cmd.OutOrStdout(), pubB64); err != nil {
 		return fmt.Errorf("writing public key to stdout: %w", err)
 	}
 
 	return nil
+}
+
+// warnIfGitRepo walks up from homeDir looking for a .git directory.
+// If found, it prints a warning to w advising the user to update .gitignore.
+func warnIfGitRepo(w io.Writer, homeDir string) {
+	if _, ok := home.FindDirUp(filepath.Dir(homeDir), ".git"); ok {
+		fmt.Fprintln(w, "warning: .rtbtr is inside a git repository; add private_key to .gitignore to avoid committing secrets")
+	}
 }
 
 func init() {

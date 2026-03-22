@@ -184,8 +184,8 @@ func TestKeygenRefusesOverwrite(t *testing.T) {
 	if err == nil {
 		t.Fatal("keygen should return error when keys exist without --force")
 	}
-	if !strings.Contains(err.Error(), "already exist") {
-		t.Errorf("error = %q, want it to mention 'already exist'", err.Error())
+	if !strings.Contains(err.Error(), "private key already exists") {
+		t.Errorf("error = %q, want it to mention 'private key already exists'", err.Error())
 	}
 
 	privateKey, err := os.ReadFile(filepath.Join(homePath, "private_key"))
@@ -409,5 +409,54 @@ func TestKeygenPublicKeyFormat(t *testing.T) {
 	pubKey := ed25519.PublicKey(pubBytes)
 	if !ed25519.Verify(pubKey, []byte("test message"), sig) {
 		t.Errorf("sign-verify roundtrip failed: keys are not a valid Ed25519 pair")
+	}
+}
+
+func TestKeygenWarnsInGitRepo(t *testing.T) {
+	resetKeygenFlags()
+
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o755); err != nil {
+		t.Fatalf("creating .git directory: %v", err)
+	}
+	homePath := filepath.Join(dir, ".rtbtr")
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	rootCmd.SetOut(stdout)
+	rootCmd.SetErr(stderr)
+	rootCmd.SetArgs([]string{"keygen", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("keygen returned error: %v", err)
+	}
+
+	errOutput := stderr.String()
+	if !strings.Contains(errOutput, "warning") {
+		t.Errorf("expected git warning on stderr, got: %q", errOutput)
+	}
+	if !strings.Contains(errOutput, ".gitignore") {
+		t.Errorf("expected .gitignore mention on stderr, got: %q", errOutput)
+	}
+}
+
+func TestKeygenNoWarningOutsideGitRepo(t *testing.T) {
+	resetKeygenFlags()
+
+	dir := t.TempDir()
+	homePath := filepath.Join(dir, ".rtbtr")
+
+	stdout := new(bytes.Buffer)
+	stderr := new(bytes.Buffer)
+	rootCmd.SetOut(stdout)
+	rootCmd.SetErr(stderr)
+	rootCmd.SetArgs([]string{"keygen", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("keygen returned error: %v", err)
+	}
+
+	if stderr.Len() != 0 {
+		t.Errorf("expected no stderr output outside git repo, got: %q", stderr.String())
 	}
 }
