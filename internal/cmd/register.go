@@ -47,9 +47,8 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving home directory: %w", err)
 	}
 
-	rejectionErr := rejectExistingRegistration(homeDir)
-	if rejectionErr != nil {
-		return rejectionErr
+	if err := rejectExistingRegistration(homeDir); err != nil {
+		return err
 	}
 
 	pubPath, tokenPath, err := ensureRegisterInputs(homeDir)
@@ -187,12 +186,12 @@ func checkRegisterStatus(statusCode int, status string, responseBody []byte) err
 
 	switch statusCode {
 	case http.StatusUnauthorized:
-		return fmt.Errorf("org token is invalid or expired")
+		return errors.New("org token is invalid or expired")
 	case http.StatusConflict:
-		return fmt.Errorf("bot already has an active key, revoke it first")
+		return errors.New("bot already has an active key, revoke it first")
 	case http.StatusUnprocessableEntity:
 		if strings.Contains(responseText, "Public key has already been used") {
-			return fmt.Errorf("public key has already been used for this bot, run rtbtr keygen --force to generate a new keypair")
+			return errors.New("public key has already been used for this bot, run rtbtr keygen --force to generate a new keypair")
 		}
 	}
 
@@ -204,15 +203,8 @@ func checkRegisterStatus(statusCode int, status string, responseBody []byte) err
 }
 
 func printRegistrationSuccess(w io.Writer, org, bot, botID string) error {
-	if _, err := fmt.Fprintf(w, "registered as %s/%s\n", org, bot); err != nil {
-		return fmt.Errorf("writing success message: %w", err)
-	}
-
-	if _, err := fmt.Fprintf(w, "bot_id: %s\n", botID); err != nil {
-		return fmt.Errorf("writing bot id: %w", err)
-	}
-
-	return nil
+	_, err := fmt.Fprintf(w, "registered as %s/%s\nbot_id: %s\n", org, bot, botID)
+	return err
 }
 
 func init() {
