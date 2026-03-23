@@ -30,4 +30,5 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&homeFlag, "home", "", "path to .rtbtr directory")
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(keygenCmd)
+	rootCmd.AddCommand(registerCmd)
 }
