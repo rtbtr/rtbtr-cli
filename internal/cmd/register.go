@@ -10,7 +10,9 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -23,7 +25,8 @@ var (
 	botFlag           string
 	registerForceFlag bool
 	apiBaseURL        = "https://api.rtbtr.com"
-	httpClient        = http.DefaultClient
+	httpClient        = &http.Client{Timeout: 30 * time.Second}
+	slugPattern       = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 )
 
 type registerRequest struct {
@@ -42,12 +45,19 @@ var registerCmd = &cobra.Command{
 }
 
 func runRegister(cmd *cobra.Command, args []string) error {
+	if !slugPattern.MatchString(orgFlag) {
+		return fmt.Errorf("invalid org %q: must contain only letters, digits, hyphens, or underscores", orgFlag)
+	}
+	if !slugPattern.MatchString(botFlag) {
+		return fmt.Errorf("invalid bot %q: must contain only letters, digits, hyphens, or underscores", botFlag)
+	}
+
 	homeDir, err := home.Resolve(homeFlag, false)
 	if err != nil {
 		return fmt.Errorf("resolving home directory: %w", err)
 	}
 
-	if err := rejectExistingRegistration(homeDir); err != nil {
+	if err = rejectExistingRegistration(homeDir); err != nil {
 		return err
 	}
 
@@ -71,7 +81,7 @@ func runRegister(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if err := config.Write(homeDir, &config.Config{Org: orgFlag, Bot: botFlag}); err != nil {
+	if err = config.Write(homeDir, &config.Config{Org: orgFlag, Bot: botFlag}); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 

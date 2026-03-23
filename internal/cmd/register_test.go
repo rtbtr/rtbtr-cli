@@ -14,6 +14,8 @@ import (
 	"github.com/rtbtr/rtbtr-cli/internal/config"
 )
 
+// resetRegisterFlags resets all flag state between tests. This must be updated
+// whenever a new flag is added to rootCmd or registerCmd.
 func resetRegisterFlags() {
 	homeFlag = ""
 	orgFlag = ""
@@ -526,5 +528,92 @@ func TestRegisterForceOverwritesIdentity(t *testing.T) {
 	output := buf.String()
 	if !strings.Contains(output, "registered as neworg/newbot") {
 		t.Errorf("stdout = %q, want it to contain 'registered as neworg/newbot'", output)
+	}
+}
+
+// Test: register rejects org flag with invalid characters.
+func TestRegisterRejectsInvalidOrg(t *testing.T) {
+	resetRegisterFlags()
+
+	dir := t.TempDir()
+	homePath := setupRtbtrDir(t, dir, map[string]string{
+		"public_key": "fakepubkey",
+		"org_token":  "faketoken",
+	})
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"register", "--org", "my org/../../admin", "--bot", "mybot", "--home", homePath})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("register should return error for invalid org slug")
+	}
+	if !strings.Contains(err.Error(), "invalid org") {
+		t.Errorf("error = %q, want it to contain 'invalid org'", err.Error())
+	}
+}
+
+// Test: register rejects bot flag with invalid characters.
+func TestRegisterRejectsInvalidBot(t *testing.T) {
+	resetRegisterFlags()
+
+	dir := t.TempDir()
+	homePath := setupRtbtrDir(t, dir, map[string]string{
+		"public_key": "fakepubkey",
+		"org_token":  "faketoken",
+	})
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"register", "--org", "myorg", "--bot", "bad bot!", "--home", homePath})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("register should return error for invalid bot slug")
+	}
+	if !strings.Contains(err.Error(), "invalid bot") {
+		t.Errorf("error = %q, want it to contain 'invalid bot'", err.Error())
+	}
+}
+
+// Test: register reports a generic error for unexpected HTTP status codes (e.g. 500).
+func TestRegisterMaps500GenericError(t *testing.T) {
+	resetRegisterFlags()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error":"something went wrong"}`))
+	}))
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	setupRtbtrDir(t, dir, map[string]string{
+		"public_key": "fakepubkey",
+		"org_token":  "faketoken",
+	})
+
+	homePath := filepath.Join(dir, ".rtbtr")
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"register", "--org", "myorg", "--bot", "mybot", "--home", homePath})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("register should return error for HTTP 500")
+	}
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "register failed") {
+		t.Errorf("error = %q, want it to contain 'register failed'", errMsg)
+	}
+	if !strings.Contains(errMsg, "500") {
+		t.Errorf("error = %q, want it to contain status code '500'", errMsg)
 	}
 }

@@ -40,10 +40,11 @@ func Write(dir string, cfg *Config) error {
 	}
 
 	path := filepath.Join(dir, "config.yaml")
+	// WriteFile with 0o600 to satisfy gosec G306, then Chmod to 0o644
+	// since config.yaml only contains org/bot names and is not sensitive.
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing config.yaml: %w", err)
 	}
-
 	if err := os.Chmod(path, 0o644); err != nil {
 		return fmt.Errorf("setting config.yaml permissions: %w", err)
 	}
