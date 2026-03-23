@@ -124,7 +124,7 @@ func TestWriteOverwritesExistingConfig(t *testing.T) {
 	}
 }
 
-// T-02: Written file has mode 0644.
+// T-02: Written file has mode 0600.
 func TestWriteFilePermissions(t *testing.T) {
 	dir := t.TempDir()
 
@@ -139,7 +139,7 @@ func TestWriteFilePermissions(t *testing.T) {
 	}
 
 	perm := info.Mode().Perm()
-	if perm != 0o644 {
-		t.Errorf("config.yaml permissions = %o, want %o", perm, 0o644)
+	if perm != 0o600 {
+		t.Errorf("config.yaml permissions = %o, want %o", perm, 0o600)
 	}
 }
