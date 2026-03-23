@@ -40,7 +40,7 @@ func Write(dir string, cfg *Config) error {
 	}
 
 	path := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing config.yaml: %w", err)
 	}
 
