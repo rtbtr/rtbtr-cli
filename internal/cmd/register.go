@@ -29,6 +29,8 @@ var (
 	slugPattern       = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 )
 
+const maxResponseBytes = 1 << 20
+
 type registerRequest struct {
 	Name      string `json:"name"`
 	PublicKey string `json:"public_key"`
@@ -154,7 +156,7 @@ func registerBot(ctx context.Context, org, bot, pubKey, orgToken string) (*regis
 	}
 	applyRegisterHeaders(req, orgToken)
 
-	responseBody, err := executeRegisterRequest(req)
+	responseBody, err := doRequest(req, checkRegisterStatus)
 	if err != nil {
 		return nil, err
 	}
@@ -172,23 +174,25 @@ func applyRegisterHeaders(req *http.Request, orgToken string) {
 	req.Header.Set("Authorization", "Bearer "+orgToken)
 }
 
-func executeRegisterRequest(req *http.Request) ([]byte, error) {
+type statusChecker func(statusCode int, status string, body []byte) error
+
+func doRequest(req *http.Request, check statusChecker) ([]byte, error) {
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
 	defer resp.Body.Close()
 
-	responseBody, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
 		return nil, fmt.Errorf("reading response body: %w", err)
 	}
 
-	if err := checkRegisterStatus(resp.StatusCode, resp.Status, responseBody); err != nil {
+	if err := check(resp.StatusCode, resp.Status, body); err != nil {
 		return nil, err
 	}
 
-	return responseBody, nil
+	return body, nil
 }
 
 func checkRegisterStatus(statusCode int, status string, responseBody []byte) error {

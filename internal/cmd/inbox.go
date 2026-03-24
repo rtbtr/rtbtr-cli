@@ -30,6 +30,14 @@ var (
 	jsonFlag      bool
 )
 
+type inboxMessage struct {
+	ID        string `json:"id"`
+	Sender    string `json:"sender"`
+	Recipient string `json:"recipient"`
+	Status    string `json:"status"`
+	CreatedAt string `json:"created_at"`
+}
+
 var inboxCmd = &cobra.Command{
 	Use:   "inbox",
 	Short: "List inbox messages",
@@ -63,7 +71,7 @@ func runInbox(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	requestURL := buildInboxURL(cfg.Org, cfg.Bot)
+	requestURL := buildInboxURL(cfg.Org, cfg.Bot, directionFlag, statusFlag, orderFlag, pageFlag, limitFlag)
 	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodGet, requestURL, nil)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
@@ -75,7 +83,7 @@ func runInbox(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("signing request: %w", err)
 	}
 
-	body, err := executeInboxRequest(req)
+	body, err := doRequest(req, checkInboxStatus)
 	if err != nil {
 		return err
 	}
@@ -90,16 +98,15 @@ func runInbox(cmd *cobra.Command, args []string) error {
 
 func loadInboxPrivateKey(homeDir string) ([]byte, error) {
 	path := filepath.Join(homeDir, "private_key")
-	data, err := os.ReadFile(path)
+	raw, err := readTrimmedFile(path, "private key")
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return nil, errors.New("private key not found, run rtbtr keygen first")
 		}
-		return nil, fmt.Errorf("reading private key: %w", err)
+		return nil, err
 	}
 
-	trimmed := strings.TrimSpace(string(data))
-	seed, err := base64.RawURLEncoding.DecodeString(trimmed)
+	seed, err := base64.RawURLEncoding.DecodeString(raw)
 	if err != nil {
 		return nil, fmt.Errorf("decoding private key: %w", err)
 	}
@@ -107,40 +114,20 @@ func loadInboxPrivateKey(homeDir string) ([]byte, error) {
 	return seed, nil
 }
 
-func buildInboxURL(org, bot string) string {
+func buildInboxURL(org, bot, direction, status, order string, page, limit int) string {
 	base := fmt.Sprintf("%s/orgs/%s/bots/%s/inbox", apiBaseURL, org, bot)
 	values := url.Values{}
-	values.Set("page", strconv.Itoa(pageFlag))
-	values.Set("limit", strconv.Itoa(limitFlag))
-	values.Set("order", orderFlag)
-	if directionFlag != "" {
-		values.Set("direction", directionFlag)
+	values.Set("page", strconv.Itoa(page))
+	values.Set("limit", strconv.Itoa(limit))
+	values.Set("order", order)
+	if direction != "" {
+		values.Set("direction", direction)
 	}
-	if statusFlag != "" {
-		values.Set("status", statusFlag)
+	if status != "" {
+		values.Set("status", status)
 	}
 
 	return base + "?" + values.Encode()
-}
-
-func executeInboxRequest(req *http.Request) ([]byte, error) {
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("sending request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("reading response body: %w", err)
-	}
-
-	statusErr := checkInboxStatus(resp.StatusCode, resp.Status, body)
-	if statusErr != nil {
-		return nil, statusErr
-	}
-
-	return body, nil
 }
 
 func checkInboxStatus(statusCode int, status string, body []byte) error {
@@ -159,7 +146,7 @@ func checkInboxStatus(statusCode int, status string, body []byte) error {
 }
 
 func printInboxTable(w io.Writer, data []byte) error {
-	var messages []map[string]interface{}
+	var messages []inboxMessage
 	err := json.Unmarshal(data, &messages)
 	if err != nil {
 		return fmt.Errorf("parsing response body: %w", err)
@@ -176,20 +163,14 @@ func printInboxTable(w io.Writer, data []byte) error {
 		return fmt.Errorf("writing table header: %w", err)
 	}
 
-	for _, message := range messages {
-		id := truncateID(getStr(message, "id"))
-		_, err = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", id, getStr(message, "sender"), getStr(message, "recipient"), getStr(message, "status"), getStr(message, "created_at"))
+	for _, m := range messages {
+		_, err = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", truncateID(m.ID), m.Sender, m.Recipient, m.Status, m.CreatedAt)
 		if err != nil {
 			return fmt.Errorf("writing table row: %w", err)
 		}
 	}
 
-	err = tw.Flush()
-	if err != nil {
-		return fmt.Errorf("flushing table writer: %w", err)
-	}
-
-	return nil
+	return tw.Flush()
 }
 
 func truncateID(id string) string {
@@ -198,16 +179,6 @@ func truncateID(id string) string {
 	}
 
 	return id[:8]
-}
-
-func getStr(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-
-	return "-"
 }
 
 func init() {

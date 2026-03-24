@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// nowFunc returns the current time. Overridden in tests for deterministic timestamps.
 var nowFunc = time.Now
 
 // Sign adds RFC 9421 Signature-Input and Signature headers to req.
