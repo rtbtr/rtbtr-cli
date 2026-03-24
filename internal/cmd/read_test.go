@@ -2,22 +2,16 @@ package cmd
 
 import (
 	"bytes"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/ecdh"
 	"crypto/ed25519"
 	"crypto/rand"
-	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
-	"golang.org/x/crypto/hkdf"
+	rtbtrcrypto "github.com/rtbtr/rtbtr-cli/internal/crypto"
 )
 
 // resetReadFlags resets all flag state between read tests.
@@ -49,86 +43,26 @@ func resetReadFlags() {
 	}
 }
 
-// encryptForTest encrypts plaintext using X25519+AES-256-GCM for a given
-// Ed25519 public key. Returns standard-base64 encrypted payload and
-// URL-safe-base64 ephemeral public key.
-func encryptForTest(t *testing.T, plaintext []byte, recipientEd25519Pub ed25519.PublicKey) (encPayloadB64, ephPubB64 string) {
-	t.Helper()
-
-	// Derive recipient X25519 public key from Ed25519 public key.
-	// Use the same derivation as the implementation: SHA-512 of seed for private,
-	// but for public key we use Edwards-to-Montgomery conversion.
-	// For test purposes, we'll derive X25519 keypair from the recipient's Ed25519 seed
-	// if available, but since we only have the public key, we'll use the
-	// edwards25519 library approach. Instead, for simplicity, we'll use the
-	// crypto/ecdh approach with the Ed25519 public key converted to X25519.
-	//
-	// Actually, since we need to encrypt TO the recipient, we need their X25519
-	// public key. We'll convert the Ed25519 public key to X25519 using the same
-	// math the implementation uses.
-
-	// For test helper: derive X25519 from the Ed25519 private key seed instead.
-	// This won't work since we only have the public key...
-	// Let's use a different approach: accept the Ed25519 seed and derive everything.
-	t.Fatal("encryptForTest should be called with seed variant")
-	return "", ""
-}
-
-// encryptForTestWithSeed encrypts plaintext using the same X25519+AES-256-GCM
-// scheme the implementation uses, given an Ed25519 seed. Returns standard-base64
+// encryptForTestWithSeed encrypts plaintext using the crypto package's
+// Encrypt function, given an Ed25519 seed. Returns standard-base64
 // encrypted payload and URL-safe-base64 ephemeral public key.
 func encryptForTestWithSeed(t *testing.T, plaintext []byte, recipientEd25519Seed []byte) (encPayloadB64, ephPubB64 string) {
 	t.Helper()
 
-	// Derive X25519 public key from Ed25519 seed (same as DeriveX25519KeyPair).
-	h := sha512.Sum512(recipientEd25519Seed)
-	h[0] &= 248
-	h[31] &= 127
-	h[31] |= 64
-	recipPriv, err := ecdh.X25519().NewPrivateKey(h[:32])
+	// Derive X25519 public key from the Ed25519 seed.
+	_, x25519Pub, err := rtbtrcrypto.DeriveX25519KeyPair(recipientEd25519Seed)
 	if err != nil {
-		t.Fatalf("creating X25519 private key: %v", err)
+		t.Fatalf("DeriveX25519KeyPair: %v", err)
 	}
-	recipPub := recipPriv.PublicKey()
 
-	// Generate ephemeral keypair.
-	eph, err := ecdh.X25519().GenerateKey(rand.Reader)
+	// Encrypt using the crypto package.
+	ciphertext, ephPub, err := rtbtrcrypto.Encrypt(plaintext, x25519Pub)
 	if err != nil {
-		t.Fatalf("generating ephemeral key: %v", err)
+		t.Fatalf("Encrypt: %v", err)
 	}
 
-	// ECDH shared secret.
-	shared, err := eph.ECDH(recipPub)
-	if err != nil {
-		t.Fatalf("ECDH: %v", err)
-	}
-
-	// HKDF-SHA256 with info "rtbtr-v1".
-	hkdfReader := hkdf.New(sha256.New, shared, nil, []byte("rtbtr-v1"))
-	key := make([]byte, 32)
-	if _, err := io.ReadFull(hkdfReader, key); err != nil {
-		t.Fatalf("HKDF: %v", err)
-	}
-
-	// AES-256-GCM.
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		t.Fatalf("AES: %v", err)
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		t.Fatalf("GCM: %v", err)
-	}
-
-	nonce := make([]byte, 12)
-	if _, err := rand.Read(nonce); err != nil {
-		t.Fatalf("nonce: %v", err)
-	}
-
-	sealed := gcm.Seal(nonce, nonce, plaintext, nil) // nonce || ciphertext || tag
-
-	return base64.StdEncoding.EncodeToString(sealed),
-		base64.RawURLEncoding.EncodeToString(eph.PublicKey().Bytes())
+	return base64.StdEncoding.EncodeToString(ciphertext),
+		base64.RawURLEncoding.EncodeToString(ephPub)
 }
 
 // buildReadMessageJSON builds a mock message detail JSON response.

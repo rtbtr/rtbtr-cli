@@ -1,11 +1,11 @@
 module github.com/rtbtr/rtbtr-cli
 
-go 1.25.0
+go 1.24
 
 require (
 	filippo.io/edwards25519 v1.1.0
 	github.com/spf13/cobra v1.8.1
-	golang.org/x/crypto v0.49.0
+	golang.org/x/crypto v0.36.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
