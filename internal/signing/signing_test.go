@@ -1,6 +1,7 @@
 package signing
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -10,24 +11,24 @@ import (
 	"time"
 )
 
-// T-S01: Sign adds Signature-Input and Signature headers conforming to RFC 9421.
-func TestSignAddsHeaders(t *testing.T) {
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+// T-S01: Sign adds a Signature-Input header conforming to RFC 9421.
+func TestSignAddsSignatureInputHeader(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("generating key: %v", err)
 	}
-	_ = pub
 
 	oldNow := nowFunc
 	nowFunc = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 	defer func() { nowFunc = oldNow }()
 
-	req, err := http.NewRequest("GET", "https://example.com/test?foo=bar", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "https://example.com/test?foo=bar", nil)
 	if err != nil {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if err := Sign(req, priv.Seed(), "testorg/testbot"); err != nil {
+	err = Sign(req, priv.Seed(), "testorg/testbot")
+	if err != nil {
 		t.Fatalf("Sign returned error: %v", err)
 	}
 
@@ -59,6 +60,28 @@ func TestSignAddsHeaders(t *testing.T) {
 	if !strings.Contains(sigInput, `keyid="testorg/testbot"`) {
 		t.Errorf("Signature-Input missing correct keyid value: %q", sigInput)
 	}
+}
+
+// T-S01: Sign adds a Signature header conforming to RFC 9421.
+func TestSignAddsSignatureHeader(t *testing.T) {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+
+	oldNow := nowFunc
+	nowFunc = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+	defer func() { nowFunc = oldNow }()
+
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "https://example.com/test?foo=bar", nil)
+	if err != nil {
+		t.Fatalf("creating request: %v", err)
+	}
+
+	err = Sign(req, priv.Seed(), "testorg/testbot")
+	if err != nil {
+		t.Fatalf("Sign returned error: %v", err)
+	}
 
 	sig := req.Header.Get("Signature")
 	if sig == "" {
@@ -74,8 +97,8 @@ func TestSignAddsHeaders(t *testing.T) {
 	// Verify the base64 content between the colons is valid.
 	inner := strings.TrimPrefix(sig, "sig1=:")
 	inner = strings.TrimSuffix(inner, ":")
-	if _, err := base64.StdEncoding.DecodeString(inner); err != nil {
-		t.Errorf("Signature base64 decode failed: %v (value: %q)", err, inner)
+	if _, decErr := base64.StdEncoding.DecodeString(inner); decErr != nil {
+		t.Errorf("Signature base64 decode failed: %v (value: %q)", decErr, inner)
 	}
 }
 
@@ -91,12 +114,13 @@ func TestSignUsesInjectedTime(t *testing.T) {
 	nowFunc = func() time.Time { return fixedTime }
 	defer func() { nowFunc = oldNow }()
 
-	req, err := http.NewRequest("GET", "https://example.com/path", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "https://example.com/path", nil)
 	if err != nil {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if err := Sign(req, priv.Seed(), "org/bot"); err != nil {
+	err = Sign(req, priv.Seed(), "org/bot")
+	if err != nil {
 		t.Fatalf("Sign returned error: %v", err)
 	}
 
@@ -109,7 +133,7 @@ func TestSignUsesInjectedTime(t *testing.T) {
 
 // T-S02: Sign rejects seed with incorrect length.
 func TestSignRejectsInvalidSeedLength(t *testing.T) {
-	req, err := http.NewRequest("GET", "https://example.com/test", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "https://example.com/test", nil)
 	if err != nil {
 		t.Fatalf("creating request: %v", err)
 	}
@@ -144,7 +168,7 @@ func TestSignAcceptsValid32ByteSeed(t *testing.T) {
 	nowFunc = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 	defer func() { nowFunc = oldNow }()
 
-	req, err := http.NewRequest("GET", "https://example.com/test", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "https://example.com/test", nil)
 	if err != nil {
 		t.Fatalf("creating request: %v", err)
 	}
@@ -154,7 +178,8 @@ func TestSignAcceptsValid32ByteSeed(t *testing.T) {
 		t.Fatalf("expected 32-byte seed, got %d", len(seed))
 	}
 
-	if err := Sign(req, seed, "org/bot"); err != nil {
+	err = Sign(req, seed, "org/bot")
+	if err != nil {
 		t.Errorf("Sign returned unexpected error for valid 32-byte seed: %v", err)
 	}
 }
@@ -170,12 +195,13 @@ func TestSignProducesVerifiableSignature(t *testing.T) {
 	nowFunc = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 	defer func() { nowFunc = oldNow }()
 
-	req, err := http.NewRequest("GET", "https://example.com/path?q=1", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "https://example.com/path?q=1", nil)
 	if err != nil {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if err := Sign(req, priv.Seed(), "org/bot"); err != nil {
+	err = Sign(req, priv.Seed(), "org/bot")
+	if err != nil {
 		t.Fatalf("Sign returned error: %v", err)
 	}
 
@@ -186,9 +212,9 @@ func TestSignProducesVerifiableSignature(t *testing.T) {
 	}
 	inner := strings.TrimPrefix(sigHeader, "sig1=:")
 	inner = strings.TrimSuffix(inner, ":")
-	sigBytes, err := base64.StdEncoding.DecodeString(inner)
-	if err != nil {
-		t.Fatalf("decoding signature base64: %v", err)
+	sigBytes, decErr := base64.StdEncoding.DecodeString(inner)
+	if decErr != nil {
+		t.Fatalf("decoding signature base64: %v", decErr)
 	}
 
 	// Extract the sigParams from Signature-Input header.
@@ -221,12 +247,13 @@ func TestSignSignatureInvalidAfterRequestChange(t *testing.T) {
 	nowFunc = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 	defer func() { nowFunc = oldNow }()
 
-	req, err := http.NewRequest("GET", "https://example.com/path?q=1", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "GET", "https://example.com/path?q=1", nil)
 	if err != nil {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if err := Sign(req, priv.Seed(), "org/bot"); err != nil {
+	err = Sign(req, priv.Seed(), "org/bot")
+	if err != nil {
 		t.Fatalf("Sign returned error: %v", err)
 	}
 
@@ -234,9 +261,9 @@ func TestSignSignatureInvalidAfterRequestChange(t *testing.T) {
 	sigHeader := req.Header.Get("Signature")
 	inner := strings.TrimPrefix(sigHeader, "sig1=:")
 	inner = strings.TrimSuffix(inner, ":")
-	sigBytes, err := base64.StdEncoding.DecodeString(inner)
-	if err != nil {
-		t.Fatalf("decoding signature base64: %v", err)
+	sigBytes, decErr := base64.StdEncoding.DecodeString(inner)
+	if decErr != nil {
+		t.Fatalf("decoding signature base64: %v", decErr)
 	}
 
 	// Extract the sigParams from Signature-Input.
@@ -265,12 +292,13 @@ func TestSignCoversCorrectComponents(t *testing.T) {
 	nowFunc = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
 	defer func() { nowFunc = oldNow }()
 
-	req, err := http.NewRequest("POST", "https://api.example.com/v1/resource?key=value", nil)
+	req, err := http.NewRequestWithContext(context.Background(), "POST", "https://api.example.com/v1/resource?key=value", nil)
 	if err != nil {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if err := Sign(req, priv.Seed(), "myorg/mybot"); err != nil {
+	err = Sign(req, priv.Seed(), "myorg/mybot")
+	if err != nil {
 		t.Fatalf("Sign returned error: %v", err)
 	}
 
