@@ -238,17 +238,17 @@ func TestDecryptValidCiphertext(t *testing.T) {
 
 // T-C04: Decrypt rejects ciphertext shorter than 28 bytes.
 func TestDecryptRejectsShortCiphertext(t *testing.T) {
-	_, _, err := Decrypt(make([]byte, 27), make([]byte, 32), make([]byte, 32))
+	_, err := Decrypt(make([]byte, 27), make([]byte, 32), make([]byte, 32))
 	if err == nil {
 		t.Error("expected error for short ciphertext (27 bytes), got nil")
 	}
 
-	_, _, err = Decrypt(make([]byte, 10), make([]byte, 32), make([]byte, 32))
+	_, err = Decrypt(make([]byte, 10), make([]byte, 32), make([]byte, 32))
 	if err == nil {
 		t.Error("expected error for short ciphertext (10 bytes), got nil")
 	}
 
-	_, _, err = Decrypt(nil, make([]byte, 32), make([]byte, 32))
+	_, err = Decrypt(nil, make([]byte, 32), make([]byte, 32))
 	if err == nil {
 		t.Error("expected error for nil ciphertext, got nil")
 	}
