@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -321,8 +322,9 @@ func TestInboxSigningUsesOrgBotKeyID(t *testing.T) {
 		t.Fatalf("inbox returned error: %v", err)
 	}
 
-	if !strings.Contains(capturedSigInput, `keyid="acme/helper"`) {
-		t.Errorf("Signature-Input = %q, want it to contain keyid=\"acme/helper\"", capturedSigInput)
+	expectedKeyID := fmt.Sprintf(`keyid="%s/o/acme/helper"`, platformBaseURL)
+	if !strings.Contains(capturedSigInput, expectedKeyID) {
+		t.Errorf("Signature-Input = %q, want it to contain %s", capturedSigInput, expectedKeyID)
 	}
 }
 

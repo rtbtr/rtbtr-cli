@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -52,6 +53,15 @@ func TestSignSetsSignatureInputWithRFC9421Format(t *testing.T) {
 	// Must include created parameter with a Unix timestamp.
 	if !strings.Contains(sigInput, "created=") {
 		t.Errorf("Signature-Input missing 'created=' parameter: %q", sigInput)
+	}
+
+	// Nonce is required for replay protection (server invariant V-4).
+	nonceRe := regexp.MustCompile(`nonce="([0-9a-f]+)"`)
+	nonceMatch := nonceRe.FindStringSubmatch(sigInput)
+	if nonceMatch == nil {
+		t.Errorf("Signature-Input missing nonce parameter: %q", sigInput)
+	} else if len(nonceMatch[1]) != 32 {
+		t.Errorf("nonce length = %d, want 32 hex chars: %q", len(nonceMatch[1]), nonceMatch[1])
 	}
 
 	// Must include the correct keyid.

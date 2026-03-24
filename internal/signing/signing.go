@@ -3,7 +3,9 @@ package signing
 
 import (
 	"crypto/ed25519"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"time"
@@ -20,7 +22,11 @@ func Sign(req *http.Request, seed []byte, keyID string) error {
 
 	privKey := ed25519.NewKeyFromSeed(seed)
 	created := nowFunc().Unix()
-	sigParams := fmt.Sprintf("(\"@method\" \"@target-uri\" \"@authority\");created=%d;keyid=%q;alg=%q", created, keyID, "ed25519")
+	nonce, err := generateNonce()
+	if err != nil {
+		return fmt.Errorf("generating nonce: %w", err)
+	}
+	sigParams := fmt.Sprintf("(\"@method\" \"@target-uri\" \"@authority\");created=%d;nonce=%q;keyid=%q;alg=%q", created, nonce, keyID, "ed25519")
 	sigBase := buildSignatureBase(req, sigParams)
 	sig := ed25519.Sign(privKey, []byte(sigBase))
 
@@ -28,6 +34,14 @@ func Sign(req *http.Request, seed []byte, keyID string) error {
 	req.Header.Set("Signature", "sig1=:"+base64.StdEncoding.EncodeToString(sig)+":")
 
 	return nil
+}
+
+func generateNonce() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 func buildSignatureBase(req *http.Request, sigParams string) string {

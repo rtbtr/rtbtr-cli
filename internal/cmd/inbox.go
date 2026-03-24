@@ -21,6 +21,8 @@ import (
 	"github.com/rtbtr/rtbtr-cli/internal/signing"
 )
 
+var platformBaseURL = "https://rtbtr.com"
+
 var (
 	directionFlag string
 	statusFlag    string
@@ -77,7 +79,7 @@ func runInbox(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating request: %w", err)
 	}
 
-	keyID := cfg.Org + "/" + cfg.Bot
+	keyID := fmt.Sprintf("%s/o/%s/%s", platformBaseURL, cfg.Org, cfg.Bot)
 	err = signing.Sign(req, seed, keyID)
 	if err != nil {
 		return fmt.Errorf("signing request: %w", err)
