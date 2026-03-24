@@ -31,4 +31,5 @@ func init() {
 	rootCmd.AddCommand(versionCmd)
 	rootCmd.AddCommand(keygenCmd)
 	rootCmd.AddCommand(registerCmd)
+	rootCmd.AddCommand(inboxCmd)
 }

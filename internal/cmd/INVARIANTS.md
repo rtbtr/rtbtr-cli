@@ -14,3 +14,14 @@
 - [tested] R-10: On a successful API response, register writes config.yaml via config.Write with the org and bot values from the command flags.
 - [tested] R-11: On success, register prints "registered as {org}/{bot}" and the bot_id from the API response JSON to stdout.
 - [tested] R-12: --force flag bypasses the existing-identity check (R-03), allowing re-registration even when config.yaml already contains org and bot.
+
+## inbox
+
+- [tested] I-01: inbox is registered as a subcommand of rootCmd and produces help text when invoked with rtbtr inbox --help.
+- [tested] I-02: inbox resolves the .rtbtr directory with allowCreate=false; rejects with an error mentioning ".rtbtr" if the directory is not found.
+- [tested] I-03: inbox loads config.yaml from .rtbtr and rejects with "not registered: run rtbtr register first" if org or bot is empty or config.yaml is missing.
+- [tested] I-04: inbox reads the private_key file from .rtbtr, trims whitespace, and base64url-no-pad decodes it to obtain the 32-byte Ed25519 seed; rejects with "private key not found" if the file is missing.
+- [tested] I-05: inbox sends a GET request to {apiBaseURL}/orgs/{org}/bots/{bot}/inbox with Signature-Input and Signature headers produced by signing.Sign using the decoded seed and "{org}/{bot}" as the key ID.
+- [tested] I-06: --direction and --status are optional string flags; when non-empty they are included as query parameters. --page (int, default 1), --limit (int, default 20), and --order (string, default "desc") are always included as query parameters.
+- [tested] I-07: --json flag outputs the raw API response body to stdout. When --json is not set, output is a human-readable aligned table (via text/tabwriter) with a header row and one row per message. When the response contains no messages, the table output prints "no messages".
+- [tested] I-08: HTTP 401 maps to error "authentication failed: signature rejected"; HTTP 403 maps to "not authorized to access inbox"; other non-2xx responses map to "inbox failed: {status}: {body}".
