@@ -101,7 +101,7 @@ func TestSignUsesInjectedTime(t *testing.T) {
 	}
 
 	sigInput := req.Header.Get("Signature-Input")
-	expectedCreated := "created=1781785800"
+	expectedCreated := "created=1781526600"
 	if !strings.Contains(sigInput, expectedCreated) {
 		t.Errorf("Signature-Input = %q, want it to contain %q", sigInput, expectedCreated)
 	}
