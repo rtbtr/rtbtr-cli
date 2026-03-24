@@ -1,3 +1,4 @@
+// Package signing implements RFC 9421 HTTP message signature helpers.
 package signing
 
 import (
