@@ -50,11 +50,11 @@ func resetInboxFlags() {
 }
 
 // setupInboxIdentity creates a .rtbtr directory with a valid config.yaml and
-// a valid Ed25519 private_key file. Returns the home path and the public key.
-func setupInboxIdentity(t *testing.T, parent string, org string, bot string) (string, ed25519.PublicKey) {
+// a valid Ed25519 private_key file. Returns the home path.
+func setupInboxIdentity(t *testing.T, parent string, org string, bot string) string {
 	t.Helper()
 
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("generating key: %v", err)
 	}
@@ -67,7 +67,7 @@ func setupInboxIdentity(t *testing.T, parent string, org string, bot string) (st
 		"private_key": encodedSeed,
 	})
 
-	return homePath, pub
+	return homePath
 }
 
 // T-I01: inbox is registered as a subcommand and produces help text.
@@ -224,7 +224,7 @@ func TestInboxSendsCorrectAPIRequest(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -272,7 +272,7 @@ func TestInboxQueryParameters(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -327,7 +327,7 @@ func TestInboxDefaultQueryParameters(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -375,7 +375,7 @@ func TestInboxJsonOutput(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -416,7 +416,7 @@ func TestInboxTableOutput(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -464,7 +464,7 @@ func TestInboxEmptyTableOutput(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -496,7 +496,7 @@ func TestInboxMaps401Error(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -527,7 +527,7 @@ func TestInboxMaps403Error(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -558,7 +558,7 @@ func TestInboxMaps500GenericError(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -598,7 +598,7 @@ func TestInboxSigningKeyID(t *testing.T) {
 	defer func() { apiBaseURL = oldBaseURL }()
 
 	dir := t.TempDir()
-	homePath, _ := setupInboxIdentity(t, dir, "myorg", "mybot")
+	homePath := setupInboxIdentity(t, dir, "myorg", "mybot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
