@@ -14,8 +14,7 @@ import (
 	"testing"
 )
 
-// resetInboxFlags resets all flag state between inbox tests. This must be updated
-// whenever a new flag is added to rootCmd or inboxCmd.
+// resetInboxFlags resets all flag state between inbox tests.
 func resetInboxFlags() {
 	homeFlag = ""
 	directionFlag = ""
@@ -71,7 +70,7 @@ func setupInboxIdentity(t *testing.T, parent string, org string, bot string) str
 }
 
 // T-I01: inbox is registered as a subcommand and produces help text.
-func TestInboxSubcommandRegistered(t *testing.T) {
+func TestInboxCommandHelp(t *testing.T) {
 	resetInboxFlags()
 
 	buf := new(bytes.Buffer)
@@ -92,7 +91,7 @@ func TestInboxSubcommandRegistered(t *testing.T) {
 }
 
 // T-I02: inbox rejects when .rtbtr directory does not exist.
-func TestInboxRejectsMissingRtbtrDir(t *testing.T) {
+func TestInboxErrorOnMissingRtbtrDir(t *testing.T) {
 	resetInboxFlags()
 
 	dir := t.TempDir()
@@ -107,14 +106,13 @@ func TestInboxRejectsMissingRtbtrDir(t *testing.T) {
 	if err == nil {
 		t.Fatal("inbox should return error when .rtbtr directory is not found")
 	}
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, ".rtbtr") {
-		t.Errorf("error = %q, want it to mention .rtbtr not found", errMsg)
+	if !strings.Contains(err.Error(), ".rtbtr") {
+		t.Errorf("error = %q, want it to mention .rtbtr", err.Error())
 	}
 }
 
-// T-I03: inbox rejects when config.yaml is missing.
-func TestInboxRejectsMissingConfig(t *testing.T) {
+// T-I03: inbox rejects when config.yaml is missing from .rtbtr.
+func TestInboxErrorOnMissingConfig(t *testing.T) {
 	resetInboxFlags()
 
 	dir := t.TempDir()
@@ -137,14 +135,13 @@ func TestInboxRejectsMissingConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("inbox should return error when config.yaml is missing")
 	}
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, "not registered: run rtbtr register first") {
-		t.Errorf("error = %q, want it to mention not registered", errMsg)
+	if !strings.Contains(err.Error(), "not registered: run rtbtr register first") {
+		t.Errorf("error = %q, want it to contain 'not registered: run rtbtr register first'", err.Error())
 	}
 }
 
-// T-I03: inbox rejects when config.yaml has empty org/bot fields.
-func TestInboxRejectsEmptyOrgBot(t *testing.T) {
+// T-I03: inbox rejects when org/bot are empty in config.yaml.
+func TestInboxErrorOnEmptyOrgBot(t *testing.T) {
 	resetInboxFlags()
 
 	dir := t.TempDir()
@@ -168,14 +165,13 @@ func TestInboxRejectsEmptyOrgBot(t *testing.T) {
 	if err == nil {
 		t.Fatal("inbox should return error when org/bot are empty")
 	}
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, "not registered") {
-		t.Errorf("error = %q, want it to contain 'not registered'", errMsg)
+	if !strings.Contains(err.Error(), "not registered") {
+		t.Errorf("error = %q, want it to contain 'not registered'", err.Error())
 	}
 }
 
 // T-I04: inbox rejects when private_key file is missing.
-func TestInboxRejectsMissingPrivateKey(t *testing.T) {
+func TestInboxErrorOnMissingPrivateKey(t *testing.T) {
 	resetInboxFlags()
 
 	dir := t.TempDir()
@@ -192,14 +188,59 @@ func TestInboxRejectsMissingPrivateKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("inbox should return error when private_key is missing")
 	}
-	errMsg := err.Error()
-	if !strings.Contains(errMsg, "private key not found") {
-		t.Errorf("error = %q, want it to contain 'private key not found'", errMsg)
+	if !strings.Contains(err.Error(), "private key not found") {
+		t.Errorf("error = %q, want it to contain 'private key not found'", err.Error())
 	}
 }
 
-// T-I05: inbox sends a GET request to /orgs/{org}/bots/{bot}/inbox with signature headers.
-func TestInboxSendsCorrectAPIRequest(t *testing.T) {
+// T-I04: inbox trims whitespace around private_key before decoding.
+func TestInboxTrimsPrivateKeyWhitespace(t *testing.T) {
+	resetInboxFlags()
+
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generating key: %v", err)
+	}
+	encodedSeed := base64.RawURLEncoding.EncodeToString(priv.Seed())
+
+	// Add whitespace around the key content.
+	paddedKey := "  \n" + encodedSeed + "\n  "
+
+	dir := t.TempDir()
+	rtbtrDir := filepath.Join(dir, ".rtbtr")
+	if mkErr := os.MkdirAll(rtbtrDir, 0o755); mkErr != nil {
+		t.Fatalf("creating .rtbtr dir: %v", mkErr)
+	}
+	if wErr := os.WriteFile(filepath.Join(rtbtrDir, "config.yaml"), []byte("org: testorg\nbot: testbot\n"), 0o644); wErr != nil {
+		t.Fatalf("writing config: %v", wErr)
+	}
+	if wErr := os.WriteFile(filepath.Join(rtbtrDir, "private_key"), []byte(paddedKey), 0o600); wErr != nil {
+		t.Fatalf("writing private_key: %v", wErr)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"inbox", "--home", rtbtrDir})
+
+	if execErr := rootCmd.Execute(); execErr != nil {
+		t.Fatalf("inbox should handle whitespace-padded private_key, got error: %v", execErr)
+	}
+}
+
+// T-I05: inbox sends GET to /orgs/{org}/bots/{bot}/inbox with signature headers.
+func TestInboxSendsSignedGetRequest(t *testing.T) {
 	resetInboxFlags()
 
 	var capturedMethod string
@@ -244,16 +285,49 @@ func TestInboxSendsCorrectAPIRequest(t *testing.T) {
 	if capturedSigInput == "" {
 		t.Error("Signature-Input header is empty")
 	}
-	if !strings.Contains(capturedSigInput, "testorg/testbot") {
-		t.Errorf("Signature-Input = %q, want it to contain keyid 'testorg/testbot'", capturedSigInput)
-	}
 	if capturedSig == "" {
 		t.Error("Signature header is empty")
 	}
 }
 
+// T-I05: The key ID used for signing is {org}/{bot}.
+func TestInboxSigningUsesOrgBotKeyID(t *testing.T) {
+	resetInboxFlags()
+
+	var capturedSigInput string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedSigInput = r.Header.Get("Signature-Input")
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "acme", "helper")
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"inbox", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("inbox returned error: %v", err)
+	}
+
+	if !strings.Contains(capturedSigInput, `keyid="acme/helper"`) {
+		t.Errorf("Signature-Input = %q, want it to contain keyid=\"acme/helper\"", capturedSigInput)
+	}
+}
+
 // T-I06: Filter flags are correctly translated to query parameters.
-func TestInboxQueryParameters(t *testing.T) {
+func TestInboxFilterFlagsAsQueryParameters(t *testing.T) {
 	resetInboxFlags()
 
 	var capturedQuery url.Values
@@ -281,8 +355,8 @@ func TestInboxQueryParameters(t *testing.T) {
 		"inbox", "--home", homePath,
 		"--direction", "inbound",
 		"--status", "delivered",
-		"--page", "2",
-		"--limit", "10",
+		"--page", "3",
+		"--limit", "50",
 		"--order", "asc",
 	})
 
@@ -296,19 +370,19 @@ func TestInboxQueryParameters(t *testing.T) {
 	if v := capturedQuery.Get("status"); v != "delivered" {
 		t.Errorf("query status = %q, want 'delivered'", v)
 	}
-	if v := capturedQuery.Get("page"); v != "2" {
-		t.Errorf("query page = %q, want '2'", v)
+	if v := capturedQuery.Get("page"); v != "3" {
+		t.Errorf("query page = %q, want '3'", v)
 	}
-	if v := capturedQuery.Get("limit"); v != "10" {
-		t.Errorf("query limit = %q, want '10'", v)
+	if v := capturedQuery.Get("limit"); v != "50" {
+		t.Errorf("query limit = %q, want '50'", v)
 	}
 	if v := capturedQuery.Get("order"); v != "asc" {
 		t.Errorf("query order = %q, want 'asc'", v)
 	}
 }
 
-// T-I06: Default query parameters are present when optional flags are not set.
-func TestInboxDefaultQueryParameters(t *testing.T) {
+// T-I06: Default query parameters present when optional flags not set.
+func TestInboxDefaultQueryParams(t *testing.T) {
 	resetInboxFlags()
 
 	var capturedQuery url.Values
@@ -348,7 +422,7 @@ func TestInboxDefaultQueryParameters(t *testing.T) {
 		t.Errorf("default query order = %q, want 'desc'", v)
 	}
 
-	// direction and status should not be in query when not set.
+	// direction and status should not be present when not set.
 	if v := capturedQuery.Get("direction"); v != "" {
 		t.Errorf("default query direction = %q, want empty (not present)", v)
 	}
@@ -357,11 +431,11 @@ func TestInboxDefaultQueryParameters(t *testing.T) {
 	}
 }
 
-// T-I07: --json flag outputs the raw API response body to stdout.
-func TestInboxJsonOutput(t *testing.T) {
+// T-I07: --json flag outputs the raw API JSON response body.
+func TestInboxJsonFlagOutputsRawBody(t *testing.T) {
 	resetInboxFlags()
 
-	responseBody := `[{"id":"msg-001","sender":"org1/bot1","recipient":"org2/bot2","status":"delivered","created_at":"2026-01-01T00:00:00Z"}]`
+	responseBody := `[{"id":"msg-abc","sender":"org1/bot1","recipient":"org2/bot2","status":"delivered","created_at":"2026-03-01T12:00:00Z"}]`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -387,22 +461,22 @@ func TestInboxJsonOutput(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "msg-001") {
-		t.Errorf("--json output = %q, want it to contain 'msg-001'", output)
+	if !strings.Contains(output, "msg-abc") {
+		t.Errorf("--json output missing message id: %q", output)
 	}
 	if !strings.Contains(output, "delivered") {
-		t.Errorf("--json output = %q, want it to contain 'delivered'", output)
+		t.Errorf("--json output missing status: %q", output)
 	}
 	if !strings.Contains(output, "org1/bot1") {
-		t.Errorf("--json output = %q, want it to contain 'org1/bot1'", output)
+		t.Errorf("--json output missing sender: %q", output)
 	}
 }
 
-// T-I07: Table output shows header row and data rows.
-func TestInboxTableOutput(t *testing.T) {
+// T-I07: Table output includes header row and message data rows.
+func TestInboxTableOutputFormat(t *testing.T) {
 	resetInboxFlags()
 
-	responseBody := `[{"id":"msg-001","sender":"org1/bot1","recipient":"org2/bot2","status":"delivered","created_at":"2026-01-01T00:00:00Z"}]`
+	responseBody := `[{"id":"msg-12345678","sender":"org1/bot1","recipient":"org2/bot2","status":"delivered","created_at":"2026-03-01T12:00:00Z"}]`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -428,28 +502,25 @@ func TestInboxTableOutput(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, "ID") {
-		t.Errorf("table output missing header 'ID': %q", output)
+
+	// Must include header columns.
+	for _, header := range []string{"ID", "FROM", "TO", "STATUS", "CREATED"} {
+		if !strings.Contains(output, header) {
+			t.Errorf("table output missing header %q: %q", header, output)
+		}
 	}
-	if !strings.Contains(output, "FROM") {
-		t.Errorf("table output missing header 'FROM': %q", output)
-	}
-	if !strings.Contains(output, "STATUS") {
-		t.Errorf("table output missing header 'STATUS': %q", output)
-	}
-	if !strings.Contains(output, "CREATED") {
-		t.Errorf("table output missing header 'CREATED': %q", output)
-	}
-	if !strings.Contains(output, "msg-001") {
-		t.Errorf("table output missing message id: %q", output)
+
+	// Must include message data.
+	if !strings.Contains(output, "msg-1234") {
+		t.Errorf("table output missing truncated message id: %q", output)
 	}
 	if !strings.Contains(output, "delivered") {
 		t.Errorf("table output missing status: %q", output)
 	}
 }
 
-// T-I07: Empty response prints 'no messages'.
-func TestInboxEmptyTableOutput(t *testing.T) {
+// T-I07: Empty response array prints "no messages".
+func TestInboxEmptyResponsePrintsNoMessages(t *testing.T) {
 	resetInboxFlags()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -472,7 +543,7 @@ func TestInboxEmptyTableOutput(t *testing.T) {
 	rootCmd.SetArgs([]string{"inbox", "--home", homePath})
 
 	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("inbox empty table returned error: %v", err)
+		t.Fatalf("inbox empty response returned error: %v", err)
 	}
 
 	output := buf.String()
@@ -481,8 +552,8 @@ func TestInboxEmptyTableOutput(t *testing.T) {
 	}
 }
 
-// T-I08a: HTTP 401 maps to 'authentication failed: signature rejected'.
-func TestInboxMaps401Error(t *testing.T) {
+// T-I08: HTTP 401 maps to "authentication failed: signature rejected".
+func TestInboxHttp401ErrorMapping(t *testing.T) {
 	resetInboxFlags()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -512,8 +583,8 @@ func TestInboxMaps401Error(t *testing.T) {
 	}
 }
 
-// T-I08b: HTTP 403 maps to 'not authorized to access inbox'.
-func TestInboxMaps403Error(t *testing.T) {
+// T-I08: HTTP 403 maps to "not authorized to access inbox".
+func TestInboxHttp403ErrorMapping(t *testing.T) {
 	resetInboxFlags()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -543,8 +614,8 @@ func TestInboxMaps403Error(t *testing.T) {
 	}
 }
 
-// T-I08c: Non-2xx HTTP responses other than 401/403 map to 'inbox failed: {status}: {body}'.
-func TestInboxMaps500GenericError(t *testing.T) {
+// T-I08: Non-2xx (e.g. 500) maps to "inbox failed: {status}: {body}".
+func TestInboxHttp500GenericErrorMapping(t *testing.T) {
 	resetInboxFlags()
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -575,87 +646,5 @@ func TestInboxMaps500GenericError(t *testing.T) {
 	}
 	if !strings.Contains(errMsg, "500") {
 		t.Errorf("error = %q, want it to contain status code '500'", errMsg)
-	}
-}
-
-// T-I05: Verify the key ID used for signing is {org}/{bot}.
-func TestInboxSigningKeyID(t *testing.T) {
-	resetInboxFlags()
-
-	var capturedSigInput string
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		capturedSigInput = r.Header.Get("Signature-Input")
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
-	}))
-	defer server.Close()
-
-	oldBaseURL := apiBaseURL
-	apiBaseURL = server.URL
-	defer func() { apiBaseURL = oldBaseURL }()
-
-	dir := t.TempDir()
-	homePath := setupInboxIdentity(t, dir, "myorg", "mybot")
-
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"inbox", "--home", homePath})
-
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("inbox returned error: %v", err)
-	}
-
-	if !strings.Contains(capturedSigInput, `keyid="myorg/mybot"`) {
-		t.Errorf("Signature-Input = %q, want it to contain keyid=\"myorg/mybot\"", capturedSigInput)
-	}
-}
-
-// T-I04: Verify the private key file is trimmed and base64url-no-pad decoded.
-func TestInboxPrivateKeyTrimmedAndDecoded(t *testing.T) {
-	resetInboxFlags()
-
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("generating key: %v", err)
-	}
-	encodedSeed := base64.RawURLEncoding.EncodeToString(priv.Seed())
-
-	// Add whitespace around the key to ensure trimming.
-	paddedKey := "  \n" + encodedSeed + "\n  "
-
-	dir := t.TempDir()
-	rtbtrDir := filepath.Join(dir, ".rtbtr")
-	if err := os.MkdirAll(rtbtrDir, 0o755); err != nil {
-		t.Fatalf("creating .rtbtr dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(rtbtrDir, "config.yaml"), []byte("org: testorg\nbot: testbot\n"), 0o644); err != nil {
-		t.Fatalf("writing config: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(rtbtrDir, "private_key"), []byte(paddedKey), 0o600); err != nil {
-		t.Fatalf("writing private_key: %v", err)
-	}
-
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`[]`))
-	}))
-	defer server.Close()
-
-	oldBaseURL := apiBaseURL
-	apiBaseURL = server.URL
-	defer func() { apiBaseURL = oldBaseURL }()
-
-	buf := new(bytes.Buffer)
-	rootCmd.SetOut(buf)
-	rootCmd.SetErr(buf)
-	rootCmd.SetArgs([]string{"inbox", "--home", rtbtrDir})
-
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("inbox should handle whitespace-padded private_key, got error: %v", err)
 	}
 }
