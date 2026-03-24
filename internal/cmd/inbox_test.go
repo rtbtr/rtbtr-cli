@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -137,8 +138,8 @@ func TestInboxRejectsMissingConfig(t *testing.T) {
 		t.Fatal("inbox should return error when config.yaml is missing")
 	}
 	errMsg := err.Error()
-	if !strings.Contains(errMsg, "config") {
-		t.Errorf("error = %q, want it to mention 'config'", errMsg)
+	if !strings.Contains(errMsg, "not registered: run rtbtr register first") {
+		t.Errorf("error = %q, want it to mention not registered", errMsg)
 	}
 }
 
@@ -255,7 +256,7 @@ func TestInboxSendsCorrectAPIRequest(t *testing.T) {
 func TestInboxQueryParameters(t *testing.T) {
 	resetInboxFlags()
 
-	var capturedQuery map[string][]string
+	var capturedQuery url.Values
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedQuery = r.URL.Query()
@@ -310,7 +311,7 @@ func TestInboxQueryParameters(t *testing.T) {
 func TestInboxDefaultQueryParameters(t *testing.T) {
 	resetInboxFlags()
 
-	var capturedQuery map[string][]string
+	var capturedQuery url.Values
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedQuery = r.URL.Query()
