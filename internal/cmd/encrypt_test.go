@@ -40,13 +40,13 @@ func resetEncryptFlags() {
 
 // generateTestEd25519PublicKey creates a random Ed25519 keypair and returns
 // the public key as URL-safe base64 (no padding).
-func generateTestEd25519PublicKey(t *testing.T) (pubB64 string, seed []byte) {
+func generateTestEd25519PublicKey(t *testing.T) string {
 	t.Helper()
-	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	pub, _, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("generating Ed25519 keypair: %v", err)
 	}
-	return base64.RawURLEncoding.EncodeToString([]byte(pub)), priv.Seed()
+	return base64.RawURLEncoding.EncodeToString([]byte(pub))
 }
 
 // T-ENC01: encrypt is registered as a root subcommand and --help succeeds.
@@ -75,7 +75,7 @@ func TestEncryptCommandHelp(t *testing.T) {
 func TestEncryptProducesValidEnvelope(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -133,7 +133,7 @@ func TestEncryptProducesValidEnvelope(t *testing.T) {
 func TestEncryptFromStdin(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	oldStdin := stdinIsTerminal
 	stdinIsTerminal = func() bool { return false }
@@ -166,7 +166,7 @@ func TestEncryptFromStdin(t *testing.T) {
 func TestEncryptRejectsEmptyMessage(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -216,7 +216,7 @@ func TestEncryptRejectsWrongLengthKey(t *testing.T) {
 func TestEncryptRejectsOversizedInput(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	// 1MB + 1 byte.
 	largeMsg := strings.Repeat("x", 1<<20+1)
@@ -254,7 +254,7 @@ func TestEncryptRejectsMissingTo(t *testing.T) {
 func TestEncryptDoesNotRequireHome(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	// Change to a directory with no .rtbtr to prove encrypt doesn't need it.
 	dir := t.TempDir()
@@ -271,14 +271,14 @@ func TestEncryptDoesNotRequireHome(t *testing.T) {
 
 	// Verify output is valid JSON.
 	var envelope map[string]interface{}
-	if err := json.Unmarshal([]byte(buf.String()), &envelope); err != nil {
+	if err := json.Unmarshal(buf.Bytes(), &envelope); err != nil {
 		t.Fatalf("output is not valid JSON: %v", err)
 	}
 }
 
 // T-ENC09: encrypt is non-deterministic — same input produces different ciphertext.
 func TestEncryptNonDeterministic(t *testing.T) {
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 	message := "same message"
 
 	outputs := make([]string, 2)
@@ -305,7 +305,7 @@ func TestEncryptNonDeterministic(t *testing.T) {
 func TestEncryptRejectsTerminalStdinWithoutMessage(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	oldStdin := stdinIsTerminal
 	stdinIsTerminal = func() bool { return true }
@@ -326,7 +326,7 @@ func TestEncryptRejectsTerminalStdinWithoutMessage(t *testing.T) {
 func TestEncryptAcceptsExactly1MB(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	// Exactly 1MB message.
 	exactMsg := strings.Repeat("x", 1<<20)
@@ -342,7 +342,7 @@ func TestEncryptAcceptsExactly1MB(t *testing.T) {
 
 	// Verify output is valid JSON.
 	var envelope map[string]interface{}
-	if err := json.Unmarshal([]byte(buf.String()), &envelope); err != nil {
+	if err := json.Unmarshal(buf.Bytes(), &envelope); err != nil {
 		t.Fatalf("output is not valid JSON: %v", err)
 	}
 }
@@ -351,7 +351,7 @@ func TestEncryptAcceptsExactly1MB(t *testing.T) {
 func TestEncryptMessageFlagPriority(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	oldStdin := stdinIsTerminal
 	stdinIsTerminal = func() bool { return false }
@@ -370,7 +370,7 @@ func TestEncryptMessageFlagPriority(t *testing.T) {
 	// Should produce valid JSON output — we can't verify which plaintext
 	// was used since it's encrypted, but the command should succeed.
 	var envelope map[string]interface{}
-	if err := json.Unmarshal([]byte(buf.String()), &envelope); err != nil {
+	if err := json.Unmarshal(buf.Bytes(), &envelope); err != nil {
 		t.Fatalf("output is not valid JSON: %v", err)
 	}
 }
@@ -379,7 +379,7 @@ func TestEncryptMessageFlagPriority(t *testing.T) {
 func TestEncryptRejectsWhitespaceOnlyMessage(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -396,7 +396,7 @@ func TestEncryptRejectsWhitespaceOnlyMessage(t *testing.T) {
 func TestEncryptRejectsOversizedStdinInput(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	oldStdin := stdinIsTerminal
 	stdinIsTerminal = func() bool { return false }
@@ -420,7 +420,7 @@ func TestEncryptRejectsOversizedStdinInput(t *testing.T) {
 func TestEncryptRejectsPositionalArgs(t *testing.T) {
 	resetEncryptFlags()
 
-	pubB64, _ := generateTestEd25519PublicKey(t)
+	pubB64 := generateTestEd25519PublicKey(t)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
