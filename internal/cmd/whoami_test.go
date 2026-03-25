@@ -147,7 +147,7 @@ func TestWhoamiJsonKeyOrder(t *testing.T) {
 	if orgIdx < 0 || botIdx < 0 || keyIdx < 0 {
 		t.Fatalf("JSON missing expected keys: %q", output)
 	}
-	if !(orgIdx < botIdx && botIdx < keyIdx) {
+	if orgIdx >= botIdx || botIdx >= keyIdx {
 		t.Errorf("JSON key order should be org, bot, public_key; got: %q", output)
 	}
 }

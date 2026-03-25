@@ -199,7 +199,7 @@ func newStatusChecker(verb string, codes map[int]string) statusChecker {
 }
 
 func doRequest(req *http.Request, check statusChecker) ([]byte, error) {
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(req) //nolint:gosec // request URL is built from validated org/bot inputs, not arbitrary user strings
 	if err != nil {
 		return nil, fmt.Errorf("sending request: %w", err)
 	}
