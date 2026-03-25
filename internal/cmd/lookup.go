@@ -63,15 +63,9 @@ func parseLookupArg(arg string) (string, string, error) {
 	return parts[0], parts[1], nil
 }
 
-func checkLookupStatus(statusCode int, status string, body []byte) error {
-	if statusCode == http.StatusNotFound {
-		return fmt.Errorf("bot not found")
-	}
-	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("lookup failed: %s: %s", status, strings.TrimSpace(string(body)))
-	}
-	return nil
-}
+var checkLookupStatus = newStatusChecker("lookup", map[int]string{
+	http.StatusNotFound: "bot not found",
+})
 
 func printLookupTable(w io.Writer, data []byte) error {
 	var profile lookupProfile
