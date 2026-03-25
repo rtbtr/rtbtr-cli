@@ -38,4 +38,5 @@ func init() {
 	rootCmd.AddCommand(signCmd)
 	rootCmd.AddCommand(verifyCmd)
 	rootCmd.AddCommand(whoamiCmd)
+	rootCmd.AddCommand(lookupCmd)
 }
