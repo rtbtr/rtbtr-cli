@@ -27,3 +27,6 @@ go.work.sum
 
 # Go cache
 .gocache/
+
+# rtbtr home directory (keys, tokens, config)
+.rtbtr/
