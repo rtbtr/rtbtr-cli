@@ -1,6 +1,6 @@
 module github.com/rtbtr/rtbtr-cli
 
-go 1.24.11
+go 1.25.6
 
 require (
 	filippo.io/edwards25519 v1.1.1
