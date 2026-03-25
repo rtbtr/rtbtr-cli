@@ -13,6 +13,11 @@ var (
 	BuildTime = "unknown"
 )
 
+// IsDev returns true when running a development build.
+func IsDev() bool {
+	return Version == "dev"
+}
+
 // Info returns formatted version information.
 func Info() string {
 	return Version + " (commit: " + Commit + ", built: " + BuildTime + ")"

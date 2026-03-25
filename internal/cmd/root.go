@@ -2,7 +2,14 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
+
+	"github.com/rtbtr/rtbtr-cli/internal/selfupdate"
+	"github.com/rtbtr/rtbtr-cli/internal/version"
 )
 
 var homeFlag string
@@ -21,9 +28,38 @@ Use "rtbtr [command] --help" for more information about a command.`,
 	SilenceErrors: true,
 }
 
-// Execute runs the root command.
+// Execute runs the root command with a non-blocking background update check.
+// The nudge is printed only on success and not after "upgrade".
 func Execute() error {
-	return rootCmd.Execute()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Skip the update check entirely for dev builds.
+	var ch chan *selfupdate.UpdateInfo
+	if !version.IsDev() {
+		ch = make(chan *selfupdate.UpdateInfo, 1)
+		go func() {
+			ch <- selfupdate.CheckForUpdate(ctx, version.Version)
+		}()
+	}
+
+	cmd, err := rootCmd.ExecuteC()
+
+	if err == nil && ch != nil && cmd != upgradeCmd {
+		select {
+		case info := <-ch:
+			if info != nil {
+				fmt.Fprintf(os.Stderr,
+					"\nA new version of rtbtr is available: %s → %s\nRun 'rtbtr upgrade' to update.\n",
+					info.CurrentVersion,
+					info.LatestVersion,
+				)
+			}
+		default:
+		}
+	}
+
+	return err
 }
 
 func init() {
@@ -41,4 +77,5 @@ func init() {
 	rootCmd.AddCommand(lookupCmd)
 	rootCmd.AddCommand(encryptCmd)
 	rootCmd.AddCommand(decryptCmd)
+	rootCmd.AddCommand(upgradeCmd)
 }
