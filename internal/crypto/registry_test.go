@@ -1,6 +1,7 @@
 package crypto
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
@@ -33,7 +34,7 @@ func TestFetchRecipientKeySuccess(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := FetchRecipientKey(server.URL, "testorg", "testbot")
+	result, err := FetchRecipientKey(context.Background(), server.URL, "testorg", "testbot")
 	if err != nil {
 		t.Fatalf("FetchRecipientKey returned error: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestFetchRecipientKey404(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := FetchRecipientKey(server.URL, "missingorg", "missingbot")
+	_, err := FetchRecipientKey(context.Background(), server.URL, "missingorg", "missingbot")
 	if err == nil {
 		t.Fatal("expected error for 404, got nil")
 	}
@@ -81,7 +82,7 @@ func TestFetchRecipientKeyMissingPublicKeyField(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := FetchRecipientKey(server.URL, "testorg", "testbot")
+	_, err := FetchRecipientKey(context.Background(), server.URL, "testorg", "testbot")
 	if err == nil {
 		t.Fatal("expected error when public_key field is missing, got nil")
 	}
@@ -99,7 +100,7 @@ func TestFetchRecipientKeyEmptyPublicKey(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := FetchRecipientKey(server.URL, "testorg", "testbot")
+	_, err := FetchRecipientKey(context.Background(), server.URL, "testorg", "testbot")
 	if err == nil {
 		t.Fatal("expected error for empty public_key, got nil")
 	}
@@ -123,7 +124,7 @@ func TestFetchRecipientKeyBase64Decoding(t *testing.T) {
 	}))
 	defer server.Close()
 
-	result, err := FetchRecipientKey(server.URL, "org1", "bot1")
+	result, err := FetchRecipientKey(context.Background(), server.URL, "org1", "bot1")
 	if err != nil {
 		t.Fatalf("FetchRecipientKey returned error: %v", err)
 	}
@@ -141,7 +142,7 @@ func TestFetchRecipientKeyServerError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	_, err := FetchRecipientKey(server.URL, "org", "bot")
+	_, err := FetchRecipientKey(context.Background(), server.URL, "org", "bot")
 	if err == nil {
 		t.Fatal("expected error for 500 response, got nil")
 	}

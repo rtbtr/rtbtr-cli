@@ -75,7 +75,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	recipientPubKey, err := rtbtrcrypto.FetchRecipientKey(apiBaseURL, recipientOrg, recipientBot)
+	recipientPubKey, err := rtbtrcrypto.FetchRecipientKey(cmd.Context(), apiBaseURL, recipientOrg, recipientBot)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return errors.New("recipient not found")
@@ -137,7 +137,7 @@ func resolveMessageInput(cmd *cobra.Command, flagValue string) ([]byte, error) {
 		return nil, errors.New("message required: use --message or pipe to stdin")
 	}
 
-	message, err := io.ReadAll(cmd.InOrStdin())
+	message, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), maxMessageBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("reading stdin: %w", err)
 	}

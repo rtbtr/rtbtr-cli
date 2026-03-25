@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -17,9 +18,11 @@ type recipientProfile struct {
 }
 
 // FetchRecipientKey fetches a bot profile and returns its Ed25519 public key.
-func FetchRecipientKey(baseURL, org, bot string) ([]byte, error) {
+const maxProfileBytes = 1 << 20
+
+func FetchRecipientKey(ctx context.Context, baseURL, org, bot string) ([]byte, error) {
 	requestURL := fmt.Sprintf("%s/orgs/%s/bots/%s", strings.TrimRight(baseURL, "/"), org, bot)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, requestURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
@@ -38,7 +41,7 @@ func FetchRecipientKey(baseURL, org, bot string) ([]byte, error) {
 	}
 
 	var profile recipientProfile
-	if decodeErr := json.NewDecoder(resp.Body).Decode(&profile); decodeErr != nil {
+	if decodeErr := json.NewDecoder(io.LimitReader(resp.Body, maxProfileBytes)).Decode(&profile); decodeErr != nil {
 		return nil, fmt.Errorf("decoding recipient profile: %w", decodeErr)
 	}
 	if profile.PublicKey == "" {

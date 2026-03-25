@@ -16,8 +16,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/rtbtr/rtbtr-cli/internal/config"
-	"github.com/rtbtr/rtbtr-cli/internal/home"
 	"github.com/rtbtr/rtbtr-cli/internal/signing"
 )
 
@@ -51,24 +49,7 @@ keypair from the .rtbtr directory.`,
 }
 
 func runInbox(cmd *cobra.Command, args []string) error {
-	homeDir, err := home.Resolve(homeFlag, false)
-	if err != nil {
-		return fmt.Errorf("resolving home directory: %w", err)
-	}
-
-	cfg, err := config.Load(homeDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return errors.New("not registered: run rtbtr register first")
-		}
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	if cfg.Org == "" || cfg.Bot == "" {
-		return errors.New("not registered: run rtbtr register first")
-	}
-
-	seed, err := loadInboxPrivateKey(homeDir)
+	cfg, seed, err := loadMailboxIdentity()
 	if err != nil {
 		return err
 	}
