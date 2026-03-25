@@ -6,13 +6,13 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
 // resetEncryptFlags resets all flag state between encrypt tests.
+// Uses command lookup so tests compile regardless of whether the
+// implementation file exists.
 func resetEncryptFlags() {
 	homeFlag = ""
 
@@ -30,13 +30,26 @@ func resetEncryptFlags() {
 		flag.Changed = false
 	}
 
-	for _, name := range []string{"to", "message", "help"} {
-		if flag := encryptCmd.Flags().Lookup(name); flag != nil {
-			if err := flag.Value.Set(flag.DefValue); err != nil {
-				panic(err)
+	if cmd, _, err := rootCmd.Find([]string{"encrypt"}); err == nil && cmd.Name() == "encrypt" {
+		for _, name := range []string{"to", "message", "help"} {
+			if flag := cmd.Flags().Lookup(name); flag != nil {
+				if err := flag.Value.Set(flag.DefValue); err != nil {
+					panic(err)
+				}
+				flag.Changed = false
 			}
-			flag.Changed = false
 		}
+	}
+}
+
+// requireEncryptCommand fails the test immediately if the encrypt
+// subcommand is not registered, ensuring all tests are red until
+// the implementation wires the command.
+func requireEncryptCommand(t *testing.T) {
+	t.Helper()
+	cmd, _, err := rootCmd.Find([]string{"encrypt"})
+	if err != nil || cmd.Name() != "encrypt" {
+		t.Fatal("encrypt command is not registered as a subcommand of rtbtr")
 	}
 }
 
@@ -54,6 +67,7 @@ func generateTestEd25519PublicKey(t *testing.T) string {
 // T-ENC01: encrypt is registered as a root subcommand and --help succeeds.
 func TestEncryptCommandHelp(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -76,6 +90,7 @@ func TestEncryptCommandHelp(t *testing.T) {
 // ephemeral_public_key, and algorithm fields.
 func TestEncryptProducesValidEnvelope(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -134,6 +149,7 @@ func TestEncryptProducesValidEnvelope(t *testing.T) {
 // T-ENC03: encrypt reads plaintext from stdin when --message is absent.
 func TestEncryptFromStdin(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -167,6 +183,7 @@ func TestEncryptFromStdin(t *testing.T) {
 // T-ENC04: encrypt rejects empty message content.
 func TestEncryptRejectsEmptyMessage(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -184,6 +201,7 @@ func TestEncryptRejectsEmptyMessage(t *testing.T) {
 // T-ENC05: encrypt rejects invalid (malformed) Ed25519 public key.
 func TestEncryptRejectsInvalidKey(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -199,6 +217,7 @@ func TestEncryptRejectsInvalidKey(t *testing.T) {
 // T-ENC05: encrypt rejects a key of wrong length (valid base64 but not 32 bytes).
 func TestEncryptRejectsWrongLengthKey(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	// 16 bytes encoded as URL-safe base64 (should be 32 bytes for Ed25519).
 	shortKey := base64.RawURLEncoding.EncodeToString(make([]byte, 16))
@@ -217,6 +236,7 @@ func TestEncryptRejectsWrongLengthKey(t *testing.T) {
 // T-ENC06: encrypt rejects input larger than 1MB.
 func TestEncryptRejectsOversizedInput(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -240,6 +260,7 @@ func TestEncryptRejectsOversizedInput(t *testing.T) {
 // T-ENC07: encrypt rejects missing --to flag.
 func TestEncryptRejectsMissingTo(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -255,6 +276,7 @@ func TestEncryptRejectsMissingTo(t *testing.T) {
 // T-ENC08: encrypt works without --home (fully offline, no private key needed).
 func TestEncryptDoesNotRequireHome(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -280,6 +302,8 @@ func TestEncryptDoesNotRequireHome(t *testing.T) {
 
 // T-ENC09: encrypt is non-deterministic — same input produces different ciphertext.
 func TestEncryptNonDeterministic(t *testing.T) {
+	requireEncryptCommand(t)
+
 	pubB64 := generateTestEd25519PublicKey(t)
 	message := "same message"
 
@@ -306,6 +330,7 @@ func TestEncryptNonDeterministic(t *testing.T) {
 // T-ENC10: encrypt rejects terminal stdin without --message.
 func TestEncryptRejectsTerminalStdinWithoutMessage(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -327,6 +352,7 @@ func TestEncryptRejectsTerminalStdinWithoutMessage(t *testing.T) {
 // T-ENC11: encrypt at exactly 1MB boundary succeeds.
 func TestEncryptAcceptsExactly1MB(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -352,6 +378,7 @@ func TestEncryptAcceptsExactly1MB(t *testing.T) {
 // T-ENC12: encrypt with --message flag takes priority over stdin content.
 func TestEncryptMessageFlagPriority(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -380,6 +407,7 @@ func TestEncryptMessageFlagPriority(t *testing.T) {
 // T-ENC13: encrypt handles whitespace-only message as empty and rejects it.
 func TestEncryptRejectsWhitespaceOnlyMessage(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -397,6 +425,7 @@ func TestEncryptRejectsWhitespaceOnlyMessage(t *testing.T) {
 // T-ENC14: encrypt stdin with oversized input (>1MB) is rejected.
 func TestEncryptRejectsOversizedStdinInput(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -421,6 +450,7 @@ func TestEncryptRejectsOversizedStdinInput(t *testing.T) {
 // T-ENC15: encrypt does not accept positional arguments.
 func TestEncryptRejectsPositionalArgs(t *testing.T) {
 	resetEncryptFlags()
+	requireEncryptCommand(t)
 
 	pubB64 := generateTestEd25519PublicKey(t)
 
@@ -438,6 +468,9 @@ func TestEncryptRejectsPositionalArgs(t *testing.T) {
 // T-ENC16: encrypt→decrypt CLI roundtrip — the JSON envelope produced by
 // encrypt can be directly consumed by decrypt to recover the original message.
 func TestEncryptDecryptCLIRoundtrip(t *testing.T) {
+	requireEncryptCommand(t)
+	requireDecryptCommand(t)
+
 	// Generate a recipient Ed25519 keypair.
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -468,23 +501,17 @@ func TestEncryptDecryptCLIRoundtrip(t *testing.T) {
 
 	// Step 2: decrypt using the matching private key.
 	dir := t.TempDir()
-	rtbtrDir := filepath.Join(dir, ".rtbtr")
-	if err := os.MkdirAll(rtbtrDir, 0o700); err != nil {
-		t.Fatalf("creating .rtbtr dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(rtbtrDir, "config.yaml"), []byte("org: testorg\nbot: testbot\n"), 0o600); err != nil {
-		t.Fatalf("writing config.yaml: %v", err)
-	}
 	encodedSeed := base64.RawURLEncoding.EncodeToString(seed)
-	if err := os.WriteFile(filepath.Join(rtbtrDir, "private_key"), []byte(encodedSeed), 0o600); err != nil {
-		t.Fatalf("writing private_key: %v", err)
-	}
+	homePath := setupRtbtrDir(t, dir, map[string]string{
+		"config.yaml": "org: testorg\nbot: testbot\n",
+		"private_key": encodedSeed,
+	})
 
 	resetDecryptFlags()
 	decBuf := new(bytes.Buffer)
 	rootCmd.SetOut(decBuf)
 	rootCmd.SetErr(new(bytes.Buffer))
-	rootCmd.SetArgs([]string{"decrypt", "--payload", envelope, "--home", rtbtrDir})
+	rootCmd.SetArgs([]string{"decrypt", "--payload", envelope, "--home", homePath})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("decrypt returned error: %v", err)
@@ -499,6 +526,9 @@ func TestEncryptDecryptCLIRoundtrip(t *testing.T) {
 // T-ENC17: encrypt→decrypt roundtrip with stdin pipe — encrypt from stdin,
 // decrypt from stdin, verifying the full pipe-friendly workflow.
 func TestEncryptDecryptStdinRoundtrip(t *testing.T) {
+	requireEncryptCommand(t)
+	requireDecryptCommand(t)
+
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatalf("generating Ed25519 keypair: %v", err)
@@ -528,24 +558,18 @@ func TestEncryptDecryptStdinRoundtrip(t *testing.T) {
 
 	// Step 2: decrypt from stdin.
 	dir := t.TempDir()
-	rtbtrDir := filepath.Join(dir, ".rtbtr")
-	if err := os.MkdirAll(rtbtrDir, 0o700); err != nil {
-		t.Fatalf("creating .rtbtr dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(rtbtrDir, "config.yaml"), []byte("org: testorg\nbot: testbot\n"), 0o600); err != nil {
-		t.Fatalf("writing config.yaml: %v", err)
-	}
 	encodedSeed := base64.RawURLEncoding.EncodeToString(seed)
-	if err := os.WriteFile(filepath.Join(rtbtrDir, "private_key"), []byte(encodedSeed), 0o600); err != nil {
-		t.Fatalf("writing private_key: %v", err)
-	}
+	homePath := setupRtbtrDir(t, dir, map[string]string{
+		"config.yaml": "org: testorg\nbot: testbot\n",
+		"private_key": encodedSeed,
+	})
 
 	resetDecryptFlags()
 	decBuf := new(bytes.Buffer)
 	rootCmd.SetOut(decBuf)
 	rootCmd.SetErr(new(bytes.Buffer))
 	rootCmd.SetIn(strings.NewReader(envelope))
-	rootCmd.SetArgs([]string{"decrypt", "--home", rtbtrDir})
+	rootCmd.SetArgs([]string{"decrypt", "--home", homePath})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("decrypt from stdin returned error: %v", err)
