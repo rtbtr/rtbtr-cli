@@ -8,13 +8,15 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/rtbtr/rtbtr-cli/internal/signing"
 	"github.com/spf13/cobra"
+
+	"github.com/rtbtr/rtbtr-cli/internal/config"
+	"github.com/rtbtr/rtbtr-cli/internal/signing"
 )
 
 var (
 	replyMessageFlag string
-	replyJsonFlag    bool
+	replyJSONFlag    bool
 )
 
 var replyCmd = &cobra.Command{
@@ -49,14 +51,12 @@ func runReply(cmd *cobra.Command, args []string) error {
 	}
 
 	var msg messageDetail
-	if err := json.Unmarshal(body, &msg); err != nil {
-		return fmt.Errorf("parsing response body: %w", err)
+	if unmarshalErr := json.Unmarshal(body, &msg); unmarshalErr != nil {
+		return fmt.Errorf("parsing response body: %w", unmarshalErr)
 	}
-	if msg.Sender.PublicKey == nil {
-		return errors.New("cannot reply: sender's key has been revoked")
-	}
-	if msg.Sender.Org == "unknown" && msg.Sender.Bot == "unknown" {
-		return errors.New("cannot reply: sender no longer exists")
+
+	if validateErr := validateReplySender(&msg); validateErr != nil {
+		return validateErr
 	}
 
 	senderEd25519Pub, err := base64.RawURLEncoding.DecodeString(*msg.Sender.PublicKey)
@@ -69,7 +69,23 @@ func runReply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	requestURL := fmt.Sprintf("%s/orgs/%s/bots/%s/inbox", apiBaseURL, msg.Sender.Org, msg.Sender.Bot)
+	return postReply(cmd, cfg, seed, &msg, bodyBytes, messageID)
+}
+
+// validateReplySender checks that the original message sender is replyable.
+func validateReplySender(msg *messageDetail) error {
+	if msg.Sender.PublicKey == nil {
+		return errors.New("cannot reply: sender's key has been revoked")
+	}
+	if msg.Sender.Org == "unknown" && msg.Sender.Name == "unknown" {
+		return errors.New("cannot reply: sender no longer exists")
+	}
+	return nil
+}
+
+// postReply sends the encrypted reply to the sender's inbox.
+func postReply(cmd *cobra.Command, cfg *config.Config, seed []byte, msg *messageDetail, bodyBytes []byte, messageID string) error {
+	requestURL := fmt.Sprintf("%s/orgs/%s/bots/%s/inbox", apiBaseURL, msg.Sender.Org, msg.Sender.Name)
 	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
@@ -77,8 +93,8 @@ func runReply(cmd *cobra.Command, args []string) error {
 	req.Header.Set("Content-Type", "application/json")
 
 	keyID := fmt.Sprintf("%s/o/%s/%s", platformBaseURL, cfg.Org, cfg.Bot)
-	if err := signing.Sign(req, seed, keyID, bodyBytes); err != nil {
-		return fmt.Errorf("signing request: %w", err)
+	if signErr := signing.Sign(req, seed, keyID, bodyBytes); signErr != nil {
+		return fmt.Errorf("signing request: %w", signErr)
 	}
 
 	responseBody, err := doRequest(req, checkSendStatus)
@@ -86,7 +102,7 @@ func runReply(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	if replyJsonFlag {
+	if replyJSONFlag {
 		return writeSendOutput(cmd, responseBody, true, "")
 	}
 	return writeSendOutput(cmd, responseBody, false, "replied to %s -> sent %s\n", messageID)
@@ -94,5 +110,5 @@ func runReply(cmd *cobra.Command, args []string) error {
 
 func init() {
 	replyCmd.Flags().StringVar(&replyMessageFlag, "message", "", "reply content")
-	replyCmd.Flags().BoolVar(&replyJsonFlag, "json", false, "print raw JSON response")
+	replyCmd.Flags().BoolVar(&replyJSONFlag, "json", false, "print raw JSON response")
 }

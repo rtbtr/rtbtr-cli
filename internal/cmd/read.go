@@ -10,13 +10,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/spf13/cobra"
+
 	rtbtrcrypto "github.com/rtbtr/rtbtr-cli/internal/crypto"
 	"github.com/rtbtr/rtbtr-cli/internal/signing"
-	"github.com/spf13/cobra"
 )
 
 var (
-	readJsonFlag bool
+	readJSONFlag bool
 	uuidPattern  = regexp.MustCompile(`(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 )
 
@@ -31,9 +32,9 @@ type messageDetail struct {
 }
 
 type messageSender struct {
-	Org       string  `json:"org"`
-	Bot       string  `json:"bot"`
 	PublicKey *string `json:"public_key"`
+	Org       string  `json:"org"`
+	Name      string  `json:"name"`
 }
 
 type encryptionMeta struct {
@@ -71,7 +72,7 @@ func runRead(cmd *cobra.Command, args []string) error {
 	}
 
 	plaintext, decryptErr := decryptMessageContent(&msg, seed)
-	if readJsonFlag {
+	if readJSONFlag {
 		return writeReadJSONOutput(cmd, body, plaintext, decryptErr)
 	}
 
@@ -86,8 +87,8 @@ func fetchMessageDetail(cmd *cobra.Command, org, bot string, seed []byte, messag
 	}
 
 	keyID := fmt.Sprintf("%s/o/%s/%s", platformBaseURL, org, bot)
-	if err := signing.Sign(req, seed, keyID, nil); err != nil {
-		return nil, fmt.Errorf("signing request: %w", err)
+	if signErr := signing.Sign(req, seed, keyID, nil); signErr != nil {
+		return nil, fmt.Errorf("signing request: %w", signErr)
 	}
 
 	body, err := doRequest(req, checkReadStatus)
@@ -158,7 +159,7 @@ func writeReadJSONOutput(cmd *cobra.Command, rawBody, plaintext []byte, decryptE
 }
 
 func writeReadDefaultOutput(cmd *cobra.Command, msg *messageDetail, plaintext []byte, decryptErr error) error {
-	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "From: %s/%s\nDate: %s\nStatus: %s\n\n", msg.Sender.Org, msg.Sender.Bot, msg.CreatedAt, msg.Status); err != nil {
+	if _, err := fmt.Fprintf(cmd.OutOrStdout(), "From: %s/%s\nDate: %s\nStatus: %s\n\n", msg.Sender.Org, msg.Sender.Name, msg.CreatedAt, msg.Status); err != nil {
 		return err
 	}
 
@@ -198,5 +199,5 @@ func checkReadStatus(statusCode int, status string, body []byte) error {
 }
 
 func init() {
-	readCmd.Flags().BoolVar(&readJsonFlag, "json", false, "print raw JSON output with decrypted content")
+	readCmd.Flags().BoolVar(&readJSONFlag, "json", false, "print raw JSON output with decrypted content")
 }

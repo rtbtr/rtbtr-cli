@@ -337,8 +337,8 @@ func TestDecryptRejectsWrongEphemeralKey(t *testing.T) {
 
 	// Use a random 32-byte value as the wrong ephemeral public key.
 	wrongEph := make([]byte, 32)
-	if _, err := rand.Read(wrongEph); err != nil {
-		t.Fatalf("generating random bytes: %v", err)
+	if _, randErr := rand.Read(wrongEph); randErr != nil {
+		t.Fatalf("generating random bytes: %v", randErr)
 	}
 
 	_, err = Decrypt(ciphertext, wrongEph, privKey)
@@ -420,8 +420,8 @@ func TestEncryptDecryptLargePayload(t *testing.T) {
 
 	// 1MB payload.
 	plaintext := make([]byte, 1<<20)
-	if _, err := rand.Read(plaintext); err != nil {
-		t.Fatalf("generating random plaintext: %v", err)
+	if _, randErr := rand.Read(plaintext); randErr != nil {
+		t.Fatalf("generating random plaintext: %v", randErr)
 	}
 
 	ciphertext, ephPub, err := Encrypt(plaintext, pubKey)

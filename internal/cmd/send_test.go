@@ -19,7 +19,7 @@ func resetSendFlags() {
 	homeFlag = ""
 	sendToFlag = ""
 	sendMessageFlag = ""
-	sendJsonFlag = false
+	sendJSONFlag = false
 
 	if flag := rootCmd.PersistentFlags().Lookup("home"); flag != nil {
 		if err := flag.Value.Set(flag.DefValue); err != nil {
@@ -222,7 +222,7 @@ func TestSendRejectsToWithEmptyBot(t *testing.T) {
 func TestSendMessageFlagPriority(t *testing.T) {
 	resetSendFlags()
 
-	server, capture := setupSendServer(t, http.StatusOK, `{"id":"msg-1"}`)
+	server, capture := setupSendServer(t, http.StatusOK, `{"message_id":"msg-1"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -257,7 +257,7 @@ func TestSendMessageFlagPriority(t *testing.T) {
 func TestSendReadsFromStdin(t *testing.T) {
 	resetSendFlags()
 
-	server, capture := setupSendServer(t, http.StatusOK, `{"id":"msg-1"}`)
+	server, capture := setupSendServer(t, http.StatusOK, `{"message_id":"msg-1"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -496,7 +496,7 @@ func TestSendRejectsMessageTooLarge(t *testing.T) {
 func TestSendPostsToCorrectEndpoint(t *testing.T) {
 	resetSendFlags()
 
-	server, capture := setupSendServer(t, http.StatusOK, `{"id":"msg-1"}`)
+	server, capture := setupSendServer(t, http.StatusOK, `{"message_id":"msg-1"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -555,7 +555,7 @@ func TestSendPostsToCorrectEndpoint(t *testing.T) {
 func TestSendPostHeaders(t *testing.T) {
 	resetSendFlags()
 
-	server, capture := setupSendServer(t, http.StatusOK, `{"id":"msg-1"}`)
+	server, capture := setupSendServer(t, http.StatusOK, `{"message_id":"msg-1"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -595,7 +595,7 @@ func TestSendPostHeaders(t *testing.T) {
 func TestSendSigningKeyID(t *testing.T) {
 	resetSendFlags()
 
-	server, capture := setupSendServer(t, http.StatusOK, `{"id":"msg-1"}`)
+	server, capture := setupSendServer(t, http.StatusOK, `{"message_id":"msg-1"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -624,7 +624,7 @@ func TestSendSigningKeyID(t *testing.T) {
 func TestSendPrintsSentMessageID(t *testing.T) {
 	resetSendFlags()
 
-	server, _ := setupSendServer(t, http.StatusOK, `{"id":"test-msg-id"}`)
+	server, _ := setupSendServer(t, http.StatusOK, `{"message_id":"test-msg-id"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -653,7 +653,7 @@ func TestSendPrintsSentMessageID(t *testing.T) {
 func TestSendJsonOutputsRawResponse(t *testing.T) {
 	resetSendFlags()
 
-	server, _ := setupSendServer(t, http.StatusOK, `{"id":"msg-json-1","status":"delivered"}`)
+	server, _ := setupSendServer(t, http.StatusOK, `{"message_id":"msg-json-1","status":"delivered"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL

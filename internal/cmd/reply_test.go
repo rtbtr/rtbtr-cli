@@ -18,7 +18,7 @@ import (
 func resetReplyFlags() {
 	homeFlag = ""
 	replyMessageFlag = ""
-	replyJsonFlag = false
+	replyJSONFlag = false
 
 	if flag := rootCmd.PersistentFlags().Lookup("home"); flag != nil {
 		if err := flag.Value.Set(flag.DefValue); err != nil {
@@ -102,18 +102,18 @@ func setupReplyServerWithGetStatus(t *testing.T, getStatus int, getBody string) 
 }
 
 type replyCapture struct {
-	GetMethod  string
-	GetPath    string
+	GetMethod   string
+	GetPath     string
 	GetSigInput string
-	GetSig     string
+	GetSig      string
 
-	PostMethod         string
-	PostPath           string
-	PostContentType    string
-	PostContentDigest  string
-	PostSigInput       string
-	PostSig            string
-	PostBody           []byte
+	PostMethod        string
+	PostPath          string
+	PostContentType   string
+	PostContentDigest string
+	PostSigInput      string
+	PostSig           string
+	PostBody          []byte
 }
 
 // buildReplyMessageJSON builds a mock original message JSON with sender info.
@@ -130,8 +130,8 @@ func buildReplyMessageJSON(t *testing.T, senderOrg, senderBot string, senderPubK
 	encPayload, ephPub := encryptForTestWithSeed(t, plaintext, readerPriv.Seed())
 
 	sender := map[string]interface{}{
-		"org": senderOrg,
-		"bot": senderBot,
+		"org":  senderOrg,
+		"name": senderBot,
 	}
 	if senderPubKey != nil {
 		sender["public_key"] = *senderPubKey
@@ -252,7 +252,7 @@ func TestReplyAcceptsMessageFlag(t *testing.T) {
 
 	msgJSON := buildReplyMessageJSON(t, "sender-org", "sender-bot", &senderPubB64)
 
-	server, _ := setupReplyServer(t, msgJSON, http.StatusOK, `{"id":"new-msg-id"}`)
+	server, _ := setupReplyServer(t, msgJSON, http.StatusOK, `{"message_id":"new-msg-id"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -302,7 +302,7 @@ func TestReplyReadsOriginalMessageViaSig(t *testing.T) {
 
 	msgJSON := buildReplyMessageJSON(t, "sender-org", "sender-bot", &senderPubB64)
 
-	server, capture := setupReplyServer(t, msgJSON, http.StatusOK, `{"id":"new-msg-id"}`)
+	server, capture := setupReplyServer(t, msgJSON, http.StatusOK, `{"message_id":"new-msg-id"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -402,6 +402,50 @@ func TestReplyRejectsSenderUnknown(t *testing.T) {
 	}
 }
 
+// assertReplyPostHeaders checks that the POST request headers are correct.
+func assertReplyPostHeaders(t *testing.T, capture *replyCapture) {
+	t.Helper()
+
+	if capture.PostContentType != "application/json" {
+		t.Errorf("POST Content-Type = %q, want application/json", capture.PostContentType)
+	}
+	if capture.PostContentDigest == "" {
+		t.Error("POST Content-Digest header is empty")
+	}
+	if capture.PostSigInput == "" {
+		t.Error("POST Signature-Input header is empty")
+	}
+	if capture.PostSig == "" {
+		t.Error("POST Signature header is empty")
+	}
+}
+
+// assertReplyPostBody checks that the POST body has valid encryption metadata.
+func assertReplyPostBody(t *testing.T, postBody []byte) {
+	t.Helper()
+
+	var body map[string]interface{}
+	if err := json.Unmarshal(postBody, &body); err != nil {
+		t.Fatalf("parsing POST body: %v", err)
+	}
+
+	payload, ok := body["encrypted_payload"].(string)
+	if !ok || payload == "" {
+		t.Error("POST body missing encrypted_payload")
+	}
+
+	enc, ok := body["encryption"].(map[string]interface{})
+	if !ok {
+		t.Fatal("POST body missing encryption object")
+	}
+	if enc["algorithm"] == nil || enc["algorithm"] == "" {
+		t.Error("encryption.algorithm missing or empty")
+	}
+	if enc["ephemeral_public_key"] == nil || enc["ephemeral_public_key"] == "" {
+		t.Error("encryption.ephemeral_public_key missing or empty")
+	}
+}
+
 // T-REPLY08: reply encrypts for original sender and POSTs to sender's inbox with Content-Digest and HTTP signature.
 func TestReplyPostsToSenderInbox(t *testing.T) {
 	resetReplyFlags()
@@ -414,7 +458,7 @@ func TestReplyPostsToSenderInbox(t *testing.T) {
 
 	msgJSON := buildReplyMessageJSON(t, "sender-org", "sender-bot", &senderPubB64)
 
-	server, capture := setupReplyServer(t, msgJSON, http.StatusOK, `{"id":"new-reply-id"}`)
+	server, capture := setupReplyServer(t, msgJSON, http.StatusOK, `{"message_id":"new-reply-id"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -438,41 +482,8 @@ func TestReplyPostsToSenderInbox(t *testing.T) {
 		t.Errorf("POST path = %q, want /orgs/sender-org/bots/sender-bot/inbox", capture.PostPath)
 	}
 
-	// Verify headers.
-	if capture.PostContentType != "application/json" {
-		t.Errorf("POST Content-Type = %q, want application/json", capture.PostContentType)
-	}
-	if capture.PostContentDigest == "" {
-		t.Error("POST Content-Digest header is empty")
-	}
-	if capture.PostSigInput == "" {
-		t.Error("POST Signature-Input header is empty")
-	}
-	if capture.PostSig == "" {
-		t.Error("POST Signature header is empty")
-	}
-
-	// Verify POST body has encryption metadata.
-	var body map[string]interface{}
-	if err := json.Unmarshal(capture.PostBody, &body); err != nil {
-		t.Fatalf("parsing POST body: %v", err)
-	}
-
-	payload, ok := body["encrypted_payload"].(string)
-	if !ok || payload == "" {
-		t.Error("POST body missing encrypted_payload")
-	}
-
-	enc, ok := body["encryption"].(map[string]interface{})
-	if !ok {
-		t.Fatal("POST body missing encryption object")
-	}
-	if enc["algorithm"] == nil || enc["algorithm"] == "" {
-		t.Error("encryption.algorithm missing or empty")
-	}
-	if enc["ephemeral_public_key"] == nil || enc["ephemeral_public_key"] == "" {
-		t.Error("encryption.ephemeral_public_key missing or empty")
-	}
+	assertReplyPostHeaders(t, capture)
+	assertReplyPostBody(t, capture.PostBody)
 }
 
 // T-REPLY09: On success, reply prints "replied to <message_id> -> sent <new_message_id>".
@@ -487,7 +498,7 @@ func TestReplyPrintsSuccessMessage(t *testing.T) {
 
 	msgJSON := buildReplyMessageJSON(t, "sender-org", "sender-bot", &senderPubB64)
 
-	server, _ := setupReplyServer(t, msgJSON, http.StatusOK, `{"id":"new-msg-id"}`)
+	server, _ := setupReplyServer(t, msgJSON, http.StatusOK, `{"message_id":"new-msg-id"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -526,7 +537,7 @@ func TestReplyJsonOutputsRawResponse(t *testing.T) {
 
 	msgJSON := buildReplyMessageJSON(t, "sender-org", "sender-bot", &senderPubB64)
 
-	server, _ := setupReplyServer(t, msgJSON, http.StatusOK, `{"id":"json-reply-id","status":"delivered"}`)
+	server, _ := setupReplyServer(t, msgJSON, http.StatusOK, `{"message_id":"json-reply-id","status":"delivered"}`)
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL

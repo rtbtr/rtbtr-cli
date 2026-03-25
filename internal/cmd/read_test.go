@@ -17,7 +17,7 @@ import (
 // resetReadFlags resets all flag state between read tests.
 func resetReadFlags() {
 	homeFlag = ""
-	readJsonFlag = false
+	readJSONFlag = false
 
 	if flag := rootCmd.PersistentFlags().Lookup("home"); flag != nil {
 		if err := flag.Value.Set(flag.DefValue); err != nil {
@@ -66,17 +66,17 @@ func encryptForTestWithSeed(t *testing.T, plaintext []byte, recipientEd25519Seed
 }
 
 // buildReadMessageJSON builds a mock message detail JSON response.
-func buildReadMessageJSON(t *testing.T, id, senderOrg, senderBot, senderPubKey, encPayload, ephPubKey, status, createdAt string) string {
+func buildReadMessageJSON(t *testing.T, id, senderOrg, senderBot, senderPubKey, encPayload, ephPubKey string) string {
 	t.Helper()
 
 	msg := map[string]interface{}{
 		"id":                id,
 		"encrypted_payload": encPayload,
-		"status":            status,
-		"created_at":        createdAt,
+		"status":            "delivered",
+		"created_at":        "2026-03-20T12:00:00Z",
 		"sender": map[string]interface{}{
 			"org":        senderOrg,
-			"bot":        senderBot,
+			"name":       senderBot,
 			"public_key": senderPubKey,
 		},
 		"recipient": "myorg/mybot",
@@ -169,7 +169,7 @@ func TestReadAcceptsValidUUID(t *testing.T) {
 	senderPubB64 := base64.RawURLEncoding.EncodeToString([]byte(senderPub))
 
 	msgJSON := buildReadMessageJSON(t, "12345678-1234-1234-1234-123456789abc",
-		"sender", "bot", senderPubB64, encPayload, ephPub, "delivered", "2026-03-20T12:00:00Z")
+		"sender", "bot", senderPubB64, encPayload, ephPub)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -222,7 +222,7 @@ func TestReadSendsSignedGetWithoutContentDigest(t *testing.T) {
 	senderPubB64 := base64.RawURLEncoding.EncodeToString([]byte(senderPub))
 
 	msgJSON := buildReadMessageJSON(t, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-		"sender", "bot", senderPubB64, encPayload, ephPub, "delivered", "2026-03-20T12:00:00Z")
+		"sender", "bot", senderPubB64, encPayload, ephPub)
 
 	var capturedMethod string
 	var capturedPath string
@@ -300,7 +300,7 @@ func TestReadDecryptsAndEmitsPlaintext(t *testing.T) {
 	senderPubB64 := base64.RawURLEncoding.EncodeToString([]byte(senderPub))
 
 	msgJSON := buildReadMessageJSON(t, "11111111-2222-3333-4444-555555555555",
-		"sender-org", "sender-bot", senderPubB64, encPayload, ephPub, "delivered", "2026-03-20T12:00:00Z")
+		"sender-org", "sender-bot", senderPubB64, encPayload, ephPub)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -350,7 +350,7 @@ func TestReadDecryptionFailureShowsMetadata(t *testing.T) {
 	senderPubB64 := base64.RawURLEncoding.EncodeToString([]byte(senderPub))
 
 	msgJSON := buildReadMessageJSON(t, "11111111-2222-3333-4444-555555555555",
-		"sender-org", "sender-bot", senderPubB64, corruptPayload, ephPub, "delivered", "2026-03-20T12:00:00Z")
+		"sender-org", "sender-bot", senderPubB64, corruptPayload, ephPub)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -418,7 +418,7 @@ func TestReadDefaultOutputFormat(t *testing.T) {
 	senderPubB64 := base64.RawURLEncoding.EncodeToString([]byte(senderPub))
 
 	msgJSON := buildReadMessageJSON(t, "11111111-2222-3333-4444-555555555555",
-		"sender-org", "sender-bot", senderPubB64, encPayload, ephPub, "delivered", "2026-03-20T12:00:00Z")
+		"sender-org", "sender-bot", senderPubB64, encPayload, ephPub)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -485,7 +485,7 @@ func TestReadJsonOutputSuccess(t *testing.T) {
 	senderPubB64 := base64.RawURLEncoding.EncodeToString([]byte(senderPub))
 
 	msgJSON := buildReadMessageJSON(t, "11111111-2222-3333-4444-555555555555",
-		"sender-org", "sender-bot", senderPubB64, encPayload, ephPub, "delivered", "2026-03-20T12:00:00Z")
+		"sender-org", "sender-bot", senderPubB64, encPayload, ephPub)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -551,7 +551,7 @@ func TestReadJsonOutputDecryptFailure(t *testing.T) {
 	senderPubB64 := base64.RawURLEncoding.EncodeToString([]byte(senderPub))
 
 	msgJSON := buildReadMessageJSON(t, "11111111-2222-3333-4444-555555555555",
-		"sender-org", "sender-bot", senderPubB64, corruptPayload, ephPub, "delivered", "2026-03-20T12:00:00Z")
+		"sender-org", "sender-bot", senderPubB64, corruptPayload, ephPub)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

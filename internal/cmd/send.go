@@ -11,11 +11,12 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/rtbtr/rtbtr-cli/internal/config"
 	rtbtrcrypto "github.com/rtbtr/rtbtr-cli/internal/crypto"
 	"github.com/rtbtr/rtbtr-cli/internal/home"
 	"github.com/rtbtr/rtbtr-cli/internal/signing"
-	"github.com/spf13/cobra"
 )
 
 const maxMessageBytes = 1 << 20
@@ -23,7 +24,7 @@ const maxMessageBytes = 1 << 20
 var (
 	sendToFlag      string
 	sendMessageFlag string
-	sendJsonFlag    bool
+	sendJSONFlag    bool
 	stdinIsTerminal = func() bool {
 		fi, err := os.Stdin.Stat()
 		if err != nil {
@@ -52,7 +53,7 @@ type sendRequestEncryption struct {
 }
 
 type sendResponse struct {
-	ID string `json:"id"`
+	ID string `json:"message_id"`
 }
 
 func runSend(cmd *cobra.Command, args []string) error {
@@ -95,8 +96,8 @@ func runSend(cmd *cobra.Command, args []string) error {
 	req.Header.Set("Content-Type", "application/json")
 
 	keyID := fmt.Sprintf("%s/o/%s/%s", platformBaseURL, cfg.Org, cfg.Bot)
-	if err := signing.Sign(req, seed, keyID, bodyBytes); err != nil {
-		return fmt.Errorf("signing request: %w", err)
+	if signErr := signing.Sign(req, seed, keyID, bodyBytes); signErr != nil {
+		return fmt.Errorf("signing request: %w", signErr)
 	}
 
 	responseBody, err := doRequest(req, checkSendStatus)
@@ -104,7 +105,7 @@ func runSend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return writeSendOutput(cmd, responseBody, sendJsonFlag, "sent %s\n")
+	return writeSendOutput(cmd, responseBody, sendJSONFlag, "sent %s\n")
 }
 
 func parseRecipient(value string) (string, string, error) {
@@ -187,7 +188,7 @@ func buildEncryptedRequestBody(message, recipientEd25519Public []byte) ([]byte, 
 		EncryptedPayload: base64.StdEncoding.EncodeToString(encrypted),
 		Encryption: sendRequestEncryption{
 			Algorithm:          "x25519-aes256gcm",
-			RecipientPublicKey: base64.RawURLEncoding.EncodeToString(recipientEd25519Public),
+			RecipientPublicKey: base64.RawURLEncoding.EncodeToString(recipientX25519),
 			EphemeralPublicKey: base64.RawURLEncoding.EncodeToString(ephPub),
 		},
 	}
@@ -238,7 +239,7 @@ func checkSendStatus(statusCode int, status string, body []byte) error {
 func init() {
 	sendCmd.Flags().StringVar(&sendToFlag, "to", "", "recipient in org/bot format")
 	sendCmd.Flags().StringVar(&sendMessageFlag, "message", "", "message content")
-	sendCmd.Flags().BoolVar(&sendJsonFlag, "json", false, "print raw JSON response")
+	sendCmd.Flags().BoolVar(&sendJSONFlag, "json", false, "print raw JSON response")
 
 	if err := sendCmd.MarkFlagRequired("to"); err != nil {
 		panic(err)
