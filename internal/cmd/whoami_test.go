@@ -13,7 +13,7 @@ import (
 // whenever a new flag is added to rootCmd or whoamiCmd.
 func resetWhoamiFlags() {
 	homeFlag = ""
-	whoamiJsonFlag = false
+	whoamiJSONFlag = false
 
 	if flag := rootCmd.PersistentFlags().Lookup("home"); flag != nil {
 		if err := flag.Value.Set(flag.DefValue); err != nil {

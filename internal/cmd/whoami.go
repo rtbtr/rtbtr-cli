@@ -13,7 +13,7 @@ import (
 	"github.com/rtbtr/rtbtr-cli/internal/home"
 )
 
-var whoamiJsonFlag bool
+var whoamiJSONFlag bool
 
 var whoamiCmd = &cobra.Command{
 	Use:   "whoami",
@@ -44,7 +44,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 
 	pubKey := strings.TrimSpace(string(pubKeyData))
 
-	if whoamiJsonFlag {
+	if whoamiJSONFlag {
 		result := map[string]string{
 			"org":        cfg.Org,
 			"bot":        cfg.Bot,
@@ -66,6 +66,6 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
-	whoamiCmd.Flags().BoolVar(&whoamiJsonFlag, "json", false, "output as JSON")
+	whoamiCmd.Flags().BoolVar(&whoamiJSONFlag, "json", false, "output as JSON")
 	rootCmd.AddCommand(whoamiCmd)
 }
