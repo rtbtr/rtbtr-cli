@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,12 @@ import (
 )
 
 var whoamiJSONFlag bool
+
+type whoamiOutput struct {
+	Org       string `json:"org"`
+	Bot       string `json:"bot"`
+	PublicKey string `json:"public_key"`
+}
 
 var whoamiCmd = &cobra.Command{
 	Use:   "whoami",
@@ -28,12 +35,16 @@ organization, bot name, and public key. Fully offline.`,
 func runWhoami(cmd *cobra.Command, args []string) error {
 	homeDir, err := home.Resolve(homeFlag, false)
 	if err != nil {
-		return fmt.Errorf(".rtbtr directory not found: %w", err)
+		return err
 	}
 
 	cfg, err := config.Load(homeDir)
 	if err != nil {
 		return fmt.Errorf("reading config: %w", err)
+	}
+
+	if cfg.Org == "" || cfg.Bot == "" {
+		return errors.New("not registered: run rtbtr register first")
 	}
 
 	pubKeyPath := filepath.Join(homeDir, "public_key")
@@ -45,12 +56,11 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 	pubKey := strings.TrimSpace(string(pubKeyData))
 
 	if whoamiJSONFlag {
-		result := map[string]string{
-			"org":        cfg.Org,
-			"bot":        cfg.Bot,
-			"public_key": pubKey,
-		}
-		data, err := json.MarshalIndent(result, "", "  ")
+		data, err := json.Marshal(whoamiOutput{
+			Org:       cfg.Org,
+			Bot:       cfg.Bot,
+			PublicKey: pubKey,
+		})
 		if err != nil {
 			return fmt.Errorf("marshaling JSON: %w", err)
 		}
