@@ -46,11 +46,22 @@ type UpgradeInfo struct {
 var newUpdater = defaultNewUpdater
 
 func defaultNewUpdater() (*goselfupdate.Updater, error) {
-	source, err := goselfupdate.NewGitHubSource(goselfupdate.GitHubConfig{})
+	source, err := goselfupdate.NewGitHubSource(goselfupdate.GitHubConfig{
+		APIToken: githubToken(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("create github source: %w", err)
 	}
 	return goselfupdate.NewUpdater(goselfupdate.Config{Source: source})
+}
+
+// githubToken returns a GitHub API token from the environment, if available.
+// Authenticated requests get 5,000 req/hour vs 60 for unauthenticated.
+func githubToken() string {
+	if t := os.Getenv("GITHUB_TOKEN"); t != "" {
+		return t
+	}
+	return os.Getenv("GH_TOKEN")
 }
 
 func repo() goselfupdate.RepositorySlug {
@@ -70,6 +81,9 @@ func CheckForUpdate(ctx context.Context, currentVersion string) *UpdateInfo {
 		return nil
 	}
 	req.Header.Set("Accept", "application/json")
+	if token := githubToken(); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

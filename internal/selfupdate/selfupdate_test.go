@@ -107,6 +107,72 @@ func TestCheckForUpdateReturnsNilOnCanceledContext(t *testing.T) {
 	}
 }
 
+func TestGithubTokenPrefersGITHUB_TOKEN(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "gh-tok")
+	t.Setenv("GH_TOKEN", "cli-tok")
+
+	if got := githubToken(); got != "gh-tok" {
+		t.Errorf("githubToken() = %q, want %q", got, "gh-tok")
+	}
+}
+
+func TestGithubTokenFallsBackToGH_TOKEN(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "cli-tok")
+
+	if got := githubToken(); got != "cli-tok" {
+		t.Errorf("githubToken() = %q, want %q", got, "cli-tok")
+	}
+}
+
+func TestGithubTokenReturnsEmptyWhenUnset(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+
+	if got := githubToken(); got != "" {
+		t.Errorf("githubToken() = %q, want empty", got)
+	}
+}
+
+func TestCheckForUpdateSendsAuthHeader(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "test-token")
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"tag_name":"v2.0.0"}`)
+	}))
+	defer server.Close()
+	defer SetLatestReleaseURLForTesting(server.URL)()
+
+	CheckForUpdate(context.Background(), "v1.0.0")
+
+	if gotAuth != "Bearer test-token" {
+		t.Errorf("Authorization = %q, want %q", gotAuth, "Bearer test-token")
+	}
+}
+
+func TestCheckForUpdateNoAuthHeaderWithoutToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"tag_name":"v2.0.0"}`)
+	}))
+	defer server.Close()
+	defer SetLatestReleaseURLForTesting(server.URL)()
+
+	CheckForUpdate(context.Background(), "v1.0.0")
+
+	if gotAuth != "" {
+		t.Errorf("Authorization = %q, want empty", gotAuth)
+	}
+}
+
 func TestDetectUpgradeRejectsInvalidSemver(t *testing.T) {
 	if _, err := DetectUpgrade(context.Background(), "abc123"); err == nil {
 		t.Fatal("expected error for invalid semver")
