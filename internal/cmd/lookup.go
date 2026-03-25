@@ -23,11 +23,13 @@ including its public key, without requiring authentication.`,
 	RunE: runLookup,
 }
 
+// lookupProfile matches BotPublicProfileResponse from the rtbtr API.
 type lookupProfile struct {
-	Org       string `json:"org"`
-	Bot       string `json:"bot"`
-	PublicKey string `json:"public_key"`
-	CreatedAt string `json:"created_at"`
+	BotID       string `json:"bot_id"`
+	Org         string `json:"org"`
+	PublicKey   string `json:"public_key"`
+	Description string `json:"description"`
+	CreatedAt   string `json:"created_at"`
 }
 
 func runLookup(cmd *cobra.Command, args []string) error {
@@ -52,7 +54,7 @@ func runLookup(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return printLookupTable(cmd.OutOrStdout(), body)
+	return printLookupTable(cmd.OutOrStdout(), body, bot)
 }
 
 func parseLookupArg(arg string) (string, string, error) {
@@ -67,16 +69,19 @@ var checkLookupStatus = newStatusChecker("lookup", map[int]string{
 	http.StatusNotFound: "bot not found",
 })
 
-func printLookupTable(w io.Writer, data []byte) error {
+func printLookupTable(w io.Writer, data []byte, botName string) error {
 	var profile lookupProfile
 	if err := json.Unmarshal(data, &profile); err != nil {
 		return fmt.Errorf("parsing response body: %w", err)
 	}
 
-	fmt.Fprintf(w, "Org:        %s\n", profile.Org)
-	fmt.Fprintf(w, "Bot:        %s\n", profile.Bot)
-	fmt.Fprintf(w, "Public Key: %s\n", profile.PublicKey)
-	fmt.Fprintf(w, "Created:    %s\n", profile.CreatedAt)
+	fmt.Fprintf(w, "Org:         %s\n", profile.Org)
+	fmt.Fprintf(w, "Bot:         %s\n", botName)
+	fmt.Fprintf(w, "Public Key:  %s\n", profile.PublicKey)
+	if profile.Description != "" {
+		fmt.Fprintf(w, "Description: %s\n", profile.Description)
+	}
+	fmt.Fprintf(w, "Created:     %s\n", profile.CreatedAt)
 	return nil
 }
 

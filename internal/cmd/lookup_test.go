@@ -213,7 +213,7 @@ func TestLookupSendsCorrectGetRequest(t *testing.T) {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"org":"acme","bot":"weather-bot","public_key":"abc123def456","created_at":"2026-03-23T14:00:00Z"}`))
+		w.Write([]byte(`{"bot_id":"uuid-1234","org":"acme","public_key":"abc123def456","description":"Weather data bot","created_at":"2026-03-23T14:00:00Z"}`))
 	}))
 	defer server.Close()
 
@@ -251,7 +251,7 @@ func TestLookupTableOutput(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"org":"acme","bot":"weather-bot","public_key":"abc123def456","created_at":"2026-03-23T14:00:00Z"}`))
+		w.Write([]byte(`{"bot_id":"uuid-1234","org":"acme","public_key":"abc123def456","description":"Weather data bot","created_at":"2026-03-23T14:00:00Z"}`))
 	}))
 	defer server.Close()
 
@@ -303,7 +303,7 @@ func TestLookupTableOutput(t *testing.T) {
 func TestLookupJsonOutput(t *testing.T) {
 	resetLookupFlags()
 
-	responseBody := `{"org":"acme","bot":"weather-bot","public_key":"abc123def456","created_at":"2026-03-23T14:00:00Z"}`
+	responseBody := `{"bot_id":"uuid-1234","org":"acme","public_key":"abc123def456","description":"Weather data bot","created_at":"2026-03-23T14:00:00Z"}`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -331,8 +331,8 @@ func TestLookupJsonOutput(t *testing.T) {
 	if !strings.Contains(output, "acme") {
 		t.Errorf("--json output missing org: %q", output)
 	}
-	if !strings.Contains(output, "weather-bot") {
-		t.Errorf("--json output missing bot: %q", output)
+	if !strings.Contains(output, "uuid-1234") {
+		t.Errorf("--json output missing bot_id: %q", output)
 	}
 	if !strings.Contains(output, "abc123def456") {
 		t.Errorf("--json output missing public_key: %q", output)
@@ -415,7 +415,7 @@ func TestLookupTableOutputFieldFormat(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"org":"acme","bot":"weather-bot","public_key":"abc123","created_at":"2026-03-23T14:00:00Z"}`))
+		w.Write([]byte(`{"bot_id":"uuid-1234","org":"acme","public_key":"abc123","description":"","created_at":"2026-03-23T14:00:00Z"}`))
 	}))
 	defer server.Close()
 
@@ -446,7 +446,7 @@ func TestLookupDoesNotRequireHomeDir(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"org":"testorg","bot":"testbot","public_key":"key123","created_at":"2026-03-23T14:00:00Z"}`))
+		w.Write([]byte(`{"bot_id":"uuid-5678","org":"testorg","public_key":"key123","description":"","created_at":"2026-03-23T14:00:00Z"}`))
 	}))
 	defer server.Close()
 
@@ -506,7 +506,7 @@ func TestLookupBadRequest(t *testing.T) {
 func TestLookupJsonPreservesExtraFields(t *testing.T) {
 	resetLookupFlags()
 
-	responseBody := `{"org":"acme","bot":"weather-bot","public_key":"abc123","created_at":"2026-03-23T14:00:00Z","bot_id":"uuid-1234","status":"active"}`
+	responseBody := `{"bot_id":"uuid-1234","org":"acme","public_key":"abc123","description":"Weather bot","created_at":"2026-03-23T14:00:00Z","extra_field":"bonus"}`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -533,7 +533,7 @@ func TestLookupJsonPreservesExtraFields(t *testing.T) {
 	if !strings.Contains(output, "uuid-1234") {
 		t.Errorf("--json output missing bot_id: %q", output)
 	}
-	if !strings.Contains(output, "active") {
-		t.Errorf("--json output missing status: %q", output)
+	if !strings.Contains(output, "bonus") {
+		t.Errorf("--json output missing extra_field: %q", output)
 	}
 }
