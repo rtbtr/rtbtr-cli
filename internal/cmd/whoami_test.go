@@ -284,10 +284,11 @@ func TestWhoamiMissingPublicKey(t *testing.T) {
 	}
 }
 
-// T-W05: whoami subcommand is registered on the root command.
+// T-W05: whoami subcommand is registered on the root command and functional.
 func TestWhoamiSubcommandRegistered(t *testing.T) {
 	resetWhoamiFlags()
 
+	// Verify help works
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(new(bytes.Buffer))
@@ -297,12 +298,38 @@ func TestWhoamiSubcommandRegistered(t *testing.T) {
 		t.Fatalf("whoami --help returned error: %v", err)
 	}
 
-	output := buf.String()
-	if len(output) == 0 {
+	helpOutput := buf.String()
+	if len(helpOutput) == 0 {
 		t.Fatal("whoami --help produced no output")
 	}
-	if !strings.Contains(output, "whoami") {
-		t.Errorf("help output does not contain 'whoami': %s", output)
+	if !strings.Contains(helpOutput, "whoami") {
+		t.Errorf("help output does not contain 'whoami': %s", helpOutput)
+	}
+
+	// Verify the command actually produces output when invoked with valid config.
+	// A stub that does nothing will fail here — the command must be functional.
+	resetWhoamiFlags()
+	dir := t.TempDir()
+	homePath := setupWhoamiDir(t, dir, map[string]string{
+		"config.yaml": "org: regorg\nbot: regbot\n",
+		"public_key":  "regpubkey",
+	})
+
+	buf = new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"whoami", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("whoami returned error: %v", err)
+	}
+
+	output := strings.TrimSpace(buf.String())
+	if len(output) == 0 {
+		t.Fatal("whoami produced no output — command must print identity info")
+	}
+	if !strings.Contains(output, "regorg") {
+		t.Errorf("output = %q, want it to contain org 'regorg'", output)
 	}
 }
 
@@ -362,6 +389,19 @@ func TestWhoamiDoesNotExposeSecrets(t *testing.T) {
 	}
 
 	output := buf.String()
+
+	// The command must produce non-empty output containing expected identity
+	// data. Without this, an empty output trivially contains no secrets.
+	if len(strings.TrimSpace(output)) == 0 {
+		t.Fatal("whoami produced no output — cannot verify secret exclusion on empty output")
+	}
+	if !strings.Contains(output, "secretorg") {
+		t.Errorf("output = %q, want it to contain org 'secretorg'", output)
+	}
+	if !strings.Contains(output, "publickeyvalue") {
+		t.Errorf("output = %q, want it to contain public key 'publickeyvalue'", output)
+	}
+
 	if strings.Contains(output, "supersecretprivatekey") {
 		t.Errorf("output contains private key: %q", output)
 	}
