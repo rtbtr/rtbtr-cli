@@ -517,9 +517,13 @@ func TestEncryptDecryptCLIRoundtrip(t *testing.T) {
 		t.Fatalf("decrypt returned error: %v", err)
 	}
 
-	decrypted := strings.TrimSpace(decBuf.String())
-	if decrypted != originalMessage {
-		t.Errorf("roundtrip failed: decrypted = %q, want %q", decrypted, originalMessage)
+	// Byte-exact comparison: decrypt must produce exactly the original
+	// plaintext bytes on stdout — no trailing newline, no extra whitespace.
+	got := decBuf.Bytes()
+	want := []byte(originalMessage)
+	if !bytes.Equal(got, want) {
+		t.Errorf("roundtrip failed: decrypted = %q (len %d), want exact bytes %q (len %d)",
+			got, len(got), want, len(want))
 	}
 }
 
@@ -575,8 +579,12 @@ func TestEncryptDecryptStdinRoundtrip(t *testing.T) {
 		t.Fatalf("decrypt from stdin returned error: %v", err)
 	}
 
-	decrypted := strings.TrimSpace(decBuf.String())
-	if decrypted != originalMessage {
-		t.Errorf("stdin roundtrip failed: decrypted = %q, want %q", decrypted, originalMessage)
+	// Byte-exact comparison: decrypt must produce exactly the original
+	// plaintext bytes on stdout — no trailing newline, no extra whitespace.
+	got := decBuf.Bytes()
+	want := []byte(originalMessage)
+	if !bytes.Equal(got, want) {
+		t.Errorf("stdin roundtrip failed: decrypted = %q (len %d), want exact bytes %q (len %d)",
+			got, len(got), want, len(want))
 	}
 }
