@@ -37,4 +37,5 @@ func init() {
 	rootCmd.AddCommand(replyCmd)
 	rootCmd.AddCommand(signCmd)
 	rootCmd.AddCommand(verifyCmd)
+	rootCmd.AddCommand(whoamiCmd)
 }
