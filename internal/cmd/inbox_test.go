@@ -512,9 +512,9 @@ func TestInboxTableOutputFormat(t *testing.T) {
 		}
 	}
 
-	// Must include message data.
-	if !strings.Contains(output, "msg-1234") {
-		t.Errorf("table output missing truncated message id: %q", output)
+	// Must include full message ID.
+	if !strings.Contains(output, "msg-12345678") {
+		t.Errorf("table output missing message id: %q", output)
 	}
 	if !strings.Contains(output, "delivered") {
 		t.Errorf("table output missing status: %q", output)

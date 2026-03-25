@@ -145,7 +145,7 @@ func printInboxTable(w io.Writer, data []byte) error {
 	}
 
 	for _, m := range messages {
-		_, err = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", truncateID(m.ID), m.Sender, m.Recipient, m.Status, m.CreatedAt)
+		_, err = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", m.ID, m.Sender, m.Recipient, m.Status, m.CreatedAt)
 		if err != nil {
 			return fmt.Errorf("writing table row: %w", err)
 		}
@@ -153,15 +153,6 @@ func printInboxTable(w io.Writer, data []byte) error {
 
 	return tw.Flush()
 }
-
-func truncateID(id string) string {
-	if len(id) <= 8 {
-		return id
-	}
-
-	return id[:8]
-}
-
 func init() {
 	inboxCmd.Flags().StringVar(&directionFlag, "direction", "", "filter by message direction")
 	inboxCmd.Flags().StringVar(&statusFlag, "status", "", "filter by message status")
