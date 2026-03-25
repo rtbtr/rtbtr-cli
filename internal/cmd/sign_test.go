@@ -79,7 +79,7 @@ func TestSignProducesValidSignature(t *testing.T) {
 		t.Fatalf("sign returned error: %v", err)
 	}
 
-	sigB64 := stdout.String()
+	sigB64 := strings.TrimSpace(stdout.String())
 	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
 	if err != nil {
 		t.Fatalf("decoding signature: %v", err)
@@ -231,11 +231,11 @@ func TestSignOutputIsURLSafeBase64(t *testing.T) {
 		t.Fatalf("sign returned error: %v", err)
 	}
 
-	output := stdout.String()
+	output := strings.TrimSuffix(stdout.String(), "\n")
 	if strings.ContainsAny(output, "+/=") {
 		t.Errorf("output contains standard base64 characters: %q", output)
 	}
 	if strings.ContainsAny(output, "\n\r \t") {
-		t.Errorf("output contains whitespace: %q", output)
+		t.Errorf("output contains unexpected whitespace: %q", output)
 	}
 }

@@ -20,9 +20,7 @@ var signCmd = &cobra.Command{
 	Long: `Sign stdin with the Ed25519 private key from the .rtbtr directory.
 
 Reads all of stdin as the content to sign (max 1MB) and outputs
-the 64-byte Ed25519 signature as URL-safe base64 (no padding) to stdout.
-
-Nothing else is written to stdout — clean for piping.`,
+the 64-byte Ed25519 signature as URL-safe base64 (no padding) to stdout.`,
 	Args: cobra.NoArgs,
 	RunE: runSign,
 }
@@ -33,7 +31,7 @@ func runSign(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving home directory: %w", err)
 	}
 
-	seed, err := loadSignPrivateKey(homeDir)
+	seed, err := home.LoadPrivateKey(homeDir)
 	if err != nil {
 		return err
 	}
@@ -53,22 +51,6 @@ func runSign(cmd *cobra.Command, args []string) error {
 	sig := ed25519.Sign(privKey, content)
 
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
-	if _, err := fmt.Fprint(cmd.OutOrStdout(), sigB64); err != nil {
-		return fmt.Errorf("writing signature to stdout: %w", err)
-	}
-
-	return nil
-}
-
-func loadSignPrivateKey(homeDir string) ([]byte, error) {
-	seed, err := loadInboxPrivateKey(homeDir)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(seed) != ed25519.SeedSize {
-		return nil, fmt.Errorf("invalid private key seed length: got %d bytes, want %d", len(seed), ed25519.SeedSize)
-	}
-
-	return seed, nil
+	_, err = fmt.Fprintln(cmd.OutOrStdout(), sigB64)
+	return err
 }

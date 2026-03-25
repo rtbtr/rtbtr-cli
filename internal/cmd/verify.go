@@ -6,20 +6,20 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 
 	"github.com/spf13/cobra"
 )
 
 const maxVerifyInputBytes = 1 << 20 // 1MB
 
+// ErrInvalidSignature is returned when signature verification fails.
+// This is not a command error — callers should exit 1 without printing "Error:".
+var ErrInvalidSignature = errors.New("invalid signature")
+
 var (
 	verifyKeyFlag       string
 	verifySignatureFlag string
 )
-
-// osExit is a package-level variable so tests can override it.
-var osExit = os.Exit
 
 var verifyCmd = &cobra.Command{
 	Use:   "verify",
@@ -65,15 +65,12 @@ func runVerify(cmd *cobra.Command, args []string) error {
 
 	pubKey := ed25519.PublicKey(pubBytes)
 	if ed25519.Verify(pubKey, content, sigBytes) {
-		if _, err := fmt.Fprintln(cmd.OutOrStdout(), "valid"); err != nil {
-			return fmt.Errorf("writing result to stdout: %w", err)
-		}
-		return nil
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), "valid")
+		return err
 	}
 
 	fmt.Fprintln(cmd.OutOrStdout(), "invalid")
-	osExit(1)
-	return nil // unreachable in production; allows tests to continue
+	return ErrInvalidSignature
 }
 
 func init() {

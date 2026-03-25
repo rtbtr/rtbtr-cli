@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -10,6 +11,9 @@ import (
 
 func main() {
 	if err := cmd.Execute(); err != nil {
+		if errors.Is(err, cmd.ErrInvalidSignature) {
+			os.Exit(1)
+		}
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}

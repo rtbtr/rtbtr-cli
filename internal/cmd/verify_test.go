@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -64,12 +65,6 @@ func TestVerifyValidSignature(t *testing.T) {
 	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
-	// Override osExit so we can capture exit calls without stopping the test.
-	exitCode := -1
-	oldExit := osExit
-	osExit = func(code int) { exitCode = code }
-	defer func() { osExit = oldExit }()
-
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
@@ -84,9 +79,6 @@ func TestVerifyValidSignature(t *testing.T) {
 	if output != "valid" {
 		t.Errorf("stdout = %q, want %q", output, "valid")
 	}
-	if exitCode != -1 {
-		t.Errorf("os.Exit was called with code %d, want no exit call", exitCode)
-	}
 }
 
 func TestVerifyInvalidSignature(t *testing.T) {
@@ -98,7 +90,6 @@ func TestVerifyInvalidSignature(t *testing.T) {
 	}
 
 	message := []byte("deploy v2.3.0\n")
-	// Create a bogus 64-byte signature.
 	fakeSig := make([]byte, ed25519.SignatureSize)
 	for i := range fakeSig {
 		fakeSig[i] = byte(i)
@@ -107,35 +98,26 @@ func TestVerifyInvalidSignature(t *testing.T) {
 	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(fakeSig)
 
-	exitCode := -1
-	oldExit := osExit
-	osExit = func(code int) { exitCode = code }
-	defer func() { osExit = oldExit }()
-
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
 	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
 
-	// Should NOT return a cobra error — the invalid result is signaled via os.Exit(1).
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("verify returned cobra error: %v (invalid signature should use os.Exit, not error)", err)
+	err = rootCmd.Execute()
+	if !errors.Is(err, ErrInvalidSignature) {
+		t.Fatalf("verify should return ErrInvalidSignature, got: %v", err)
 	}
 
 	output := strings.TrimSpace(stdout.String())
 	if output != "invalid" {
 		t.Errorf("stdout = %q, want %q", output, "invalid")
 	}
-	if exitCode != 1 {
-		t.Errorf("os.Exit code = %d, want 1", exitCode)
-	}
 }
 
 func TestVerifyRejectsInvalidKey(t *testing.T) {
 	resetVerifyFlags()
 
-	// Not valid base64.
 	badKey := "not-valid-base64!@#$%"
 	sigB64 := base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 
@@ -163,7 +145,6 @@ func TestVerifyRejectsInvalidSignature(t *testing.T) {
 	}
 	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 
-	// Not valid base64.
 	badSig := "not-valid-base64!@#$%"
 
 	stdin := bytes.NewReader([]byte("some data"))
@@ -232,16 +213,11 @@ func TestSignVerifyRoundtrip(t *testing.T) {
 		t.Fatalf("sign returned error: %v", err)
 	}
 
-	sigB64 := signStdout.String()
+	sigB64 := strings.TrimSpace(signStdout.String())
 
 	// Verify.
 	resetVerifyFlags()
 	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
-
-	exitCode := -1
-	oldExit := osExit
-	osExit = func(code int) { exitCode = code }
-	defer func() { osExit = oldExit }()
 
 	verifyStdin := bytes.NewReader(message)
 	verifyStdout := new(bytes.Buffer)
@@ -256,9 +232,6 @@ func TestSignVerifyRoundtrip(t *testing.T) {
 	output := strings.TrimSpace(verifyStdout.String())
 	if output != "valid" {
 		t.Errorf("roundtrip verify stdout = %q, want %q", output, "valid")
-	}
-	if exitCode != -1 {
-		t.Errorf("os.Exit was called with code %d during valid roundtrip", exitCode)
 	}
 }
 
@@ -281,27 +254,20 @@ func TestVerifyWrongKey(t *testing.T) {
 	keyB64 := base64.RawURLEncoding.EncodeToString(wrongPub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
-	exitCode := -1
-	oldExit := osExit
-	osExit = func(code int) { exitCode = code }
-	defer func() { osExit = oldExit }()
-
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
 	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
 
-	if err := rootCmd.Execute(); err != nil {
-		t.Fatalf("verify returned cobra error: %v (wrong key should use os.Exit, not error)", err)
+	err = rootCmd.Execute()
+	if !errors.Is(err, ErrInvalidSignature) {
+		t.Fatalf("verify should return ErrInvalidSignature, got: %v", err)
 	}
 
 	output := strings.TrimSpace(stdout.String())
 	if output != "invalid" {
 		t.Errorf("stdout = %q, want %q", output, "invalid")
-	}
-	if exitCode != 1 {
-		t.Errorf("os.Exit code = %d, want 1", exitCode)
 	}
 }
 
@@ -335,7 +301,6 @@ func TestVerifyRejectsEmptyStdin(t *testing.T) {
 func TestVerifyRejectsWrongLengthKey(t *testing.T) {
 	resetVerifyFlags()
 
-	// 16-byte key (wrong length).
 	shortKey := make([]byte, 16)
 	keyB64 := base64.RawURLEncoding.EncodeToString(shortKey)
 	sigB64 := base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
@@ -364,7 +329,6 @@ func TestVerifyRejectsWrongLengthSignature(t *testing.T) {
 	}
 	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 
-	// 32-byte signature (wrong length).
 	shortSig := make([]byte, 32)
 	sigB64 := base64.RawURLEncoding.EncodeToString(shortSig)
 
