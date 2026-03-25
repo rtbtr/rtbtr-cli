@@ -3,7 +3,7 @@ module github.com/rtbtr/rtbtr-cli
 go 1.24.11
 
 require (
-	filippo.io/edwards25519 v1.1.0
+	filippo.io/edwards25519 v1.1.1
 	github.com/creativeprojects/go-selfupdate v1.4.1
 	github.com/spf13/cobra v1.8.1
 	golang.org/x/crypto v0.36.0
