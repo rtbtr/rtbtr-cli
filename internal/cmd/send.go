@@ -174,7 +174,7 @@ func loadMailboxIdentity() (*config.Config, []byte, error) {
 		return nil, nil, errors.New("not registered: run rtbtr register first")
 	}
 
-	seed, err := loadInboxPrivateKey(homeDir)
+	seed, err := home.LoadPrivateKey(homeDir)
 	if err != nil {
 		return nil, nil, err
 	}

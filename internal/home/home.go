@@ -1,10 +1,14 @@
-// Package home resolves the .rtbtr home directory.
+// Package home resolves the .rtbtr home directory and loads key material.
 package home
 
 import (
+	"crypto/ed25519"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // FindDirUp walks up from startDir looking for a subdirectory named name.
@@ -55,4 +59,30 @@ func Resolve(explicitHome string, allowCreate bool) (string, error) {
 	}
 
 	return path, nil
+}
+
+// LoadPrivateKey reads the private_key file from dir, decodes URL-safe base64,
+// and validates that it is a valid Ed25519 seed (32 bytes).
+func LoadPrivateKey(dir string) ([]byte, error) {
+	path := filepath.Join(dir, "private_key")
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, errors.New("private key not found, run rtbtr keygen first")
+		}
+		return nil, fmt.Errorf("reading private key: %w", err)
+	}
+
+	raw := strings.TrimSpace(string(data))
+	seed, err := base64.RawURLEncoding.DecodeString(raw)
+	if err != nil {
+		return nil, fmt.Errorf("decoding private key: %w", err)
+	}
+
+	if len(seed) != ed25519.SeedSize {
+		return nil, fmt.Errorf("invalid private key: got %d bytes, want %d", len(seed), ed25519.SeedSize)
+	}
+
+	return seed, nil
 }

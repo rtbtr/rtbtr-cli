@@ -1,15 +1,11 @@
 package cmd
 
 import (
-	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"text/tabwriter"
 
@@ -86,24 +82,6 @@ func runInbox(cmd *cobra.Command, args []string) error {
 	}
 
 	return printInboxTable(cmd.OutOrStdout(), body)
-}
-
-func loadInboxPrivateKey(homeDir string) ([]byte, error) {
-	path := filepath.Join(homeDir, "private_key")
-	raw, err := readTrimmedFile(path, "private key")
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.New("private key not found, run rtbtr keygen first")
-		}
-		return nil, err
-	}
-
-	seed, err := base64.RawURLEncoding.DecodeString(raw)
-	if err != nil {
-		return nil, fmt.Errorf("decoding private key: %w", err)
-	}
-
-	return seed, nil
 }
 
 func buildInboxURL(org, bot, direction, status, order string, page, limit int) string {
