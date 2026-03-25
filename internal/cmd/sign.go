@@ -78,5 +78,9 @@ func loadSignPrivateKey(homeDir string) ([]byte, error) {
 		return nil, fmt.Errorf("decoding private key: %w", err)
 	}
 
+	if len(seed) != ed25519.SeedSize {
+		return nil, fmt.Errorf("invalid private key seed length: got %d bytes, want %d", len(seed), ed25519.SeedSize)
+	}
+
 	return seed, nil
 }
