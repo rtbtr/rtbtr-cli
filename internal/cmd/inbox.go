@@ -11,13 +11,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 
-	"github.com/rtbtr/rtbtr-cli/internal/config"
-	"github.com/rtbtr/rtbtr-cli/internal/home"
 	"github.com/rtbtr/rtbtr-cli/internal/signing"
 )
 
@@ -51,24 +48,7 @@ keypair from the .rtbtr directory.`,
 }
 
 func runInbox(cmd *cobra.Command, args []string) error {
-	homeDir, err := home.Resolve(homeFlag, false)
-	if err != nil {
-		return fmt.Errorf("resolving home directory: %w", err)
-	}
-
-	cfg, err := config.Load(homeDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return errors.New("not registered: run rtbtr register first")
-		}
-		return fmt.Errorf("loading config: %w", err)
-	}
-
-	if cfg.Org == "" || cfg.Bot == "" {
-		return errors.New("not registered: run rtbtr register first")
-	}
-
-	seed, err := loadInboxPrivateKey(homeDir)
+	cfg, seed, err := loadMailboxIdentity()
 	if err != nil {
 		return err
 	}
@@ -80,7 +60,7 @@ func runInbox(cmd *cobra.Command, args []string) error {
 	}
 
 	keyID := fmt.Sprintf("%s/o/%s/%s", platformBaseURL, cfg.Org, cfg.Bot)
-	err = signing.Sign(req, seed, keyID)
+	err = signing.Sign(req, seed, keyID, nil)
 	if err != nil {
 		return fmt.Errorf("signing request: %w", err)
 	}
@@ -132,20 +112,9 @@ func buildInboxURL(org, bot, direction, status, order string, page, limit int) s
 	return base + "?" + values.Encode()
 }
 
-func checkInboxStatus(statusCode int, status string, body []byte) error {
-	switch statusCode {
-	case http.StatusUnauthorized:
-		return errors.New("authentication failed: signature rejected")
-	case http.StatusForbidden:
-		return errors.New("not authorized to access inbox")
-	}
-
-	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("inbox failed: %s: %s", status, strings.TrimSpace(string(body)))
-	}
-
-	return nil
-}
+var checkInboxStatus = newStatusChecker("inbox", map[int]string{
+	http.StatusForbidden: "not authorized to access inbox",
+})
 
 func printInboxTable(w io.Writer, data []byte) error {
 	var messages []inboxMessage

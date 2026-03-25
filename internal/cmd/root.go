@@ -32,4 +32,7 @@ func init() {
 	rootCmd.AddCommand(keygenCmd)
 	rootCmd.AddCommand(registerCmd)
 	rootCmd.AddCommand(inboxCmd)
+	rootCmd.AddCommand(sendCmd)
+	rootCmd.AddCommand(readCmd)
+	rootCmd.AddCommand(replyCmd)
 }

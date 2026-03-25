@@ -29,7 +29,7 @@ func TestSignSetsSignatureInputWithRFC9421Format(t *testing.T) {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if signErr := Sign(req, priv.Seed(), "myorg/mybot"); signErr != nil {
+	if signErr := Sign(req, priv.Seed(), "myorg/mybot", nil); signErr != nil {
 		t.Fatalf("Sign returned error: %v", signErr)
 	}
 
@@ -91,7 +91,7 @@ func TestSignSetsSignatureWithColonWrappedBase64(t *testing.T) {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if signErr := Sign(req, priv.Seed(), "org/bot"); signErr != nil {
+	if signErr := Sign(req, priv.Seed(), "org/bot", nil); signErr != nil {
 		t.Fatalf("Sign returned error: %v", signErr)
 	}
 
@@ -143,7 +143,7 @@ func TestSignCreatedTimestampReflectsInjectedTime(t *testing.T) {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if signErr := Sign(req, priv.Seed(), "org/bot"); signErr != nil {
+	if signErr := Sign(req, priv.Seed(), "org/bot", nil); signErr != nil {
 		t.Fatalf("Sign returned error: %v", signErr)
 	}
 
@@ -163,23 +163,23 @@ func TestSignReturnsErrorForWrongSeedLength(t *testing.T) {
 
 	// 16-byte seed (too short).
 	shortSeed := make([]byte, 16)
-	if signErr := Sign(req, shortSeed, "org/bot"); signErr == nil {
+	if signErr := Sign(req, shortSeed, "org/bot", nil); signErr == nil {
 		t.Error("Sign should return error for 16-byte seed, got nil")
 	}
 
 	// 64-byte seed (too long).
 	longSeed := make([]byte, 64)
-	if signErr := Sign(req, longSeed, "org/bot"); signErr == nil {
+	if signErr := Sign(req, longSeed, "org/bot", nil); signErr == nil {
 		t.Error("Sign should return error for 64-byte seed, got nil")
 	}
 
 	// Empty seed.
-	if signErr := Sign(req, []byte{}, "org/bot"); signErr == nil {
+	if signErr := Sign(req, []byte{}, "org/bot", nil); signErr == nil {
 		t.Error("Sign should return error for empty seed, got nil")
 	}
 
 	// Nil seed.
-	if signErr := Sign(req, nil, "org/bot"); signErr == nil {
+	if signErr := Sign(req, nil, "org/bot", nil); signErr == nil {
 		t.Error("Sign should return error for nil seed, got nil")
 	}
 }
@@ -205,7 +205,7 @@ func TestSignSucceedsForValid32ByteSeed(t *testing.T) {
 		t.Fatalf("expected 32-byte seed, got %d", len(seed))
 	}
 
-	if signErr := Sign(req, seed, "org/bot"); signErr != nil {
+	if signErr := Sign(req, seed, "org/bot", nil); signErr != nil {
 		t.Errorf("Sign returned unexpected error for 32-byte seed: %v", signErr)
 	}
 }
@@ -218,7 +218,7 @@ func TestSignDoesNotSetHeadersOnInvalidSeed(t *testing.T) {
 	}
 
 	badSeed := make([]byte, 10)
-	_ = Sign(req, badSeed, "org/bot")
+	_ = Sign(req, badSeed, "org/bot", nil)
 
 	if h := req.Header.Get("Signature-Input"); h != "" {
 		t.Errorf("Signature-Input header should be empty after failed Sign, got %q", h)
@@ -244,7 +244,7 @@ func TestSignProducesVerifiableEd25519Signature(t *testing.T) {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if signErr := Sign(req, priv.Seed(), "org1/bot1"); signErr != nil {
+	if signErr := Sign(req, priv.Seed(), "org1/bot1", nil); signErr != nil {
 		t.Fatalf("Sign returned error: %v", signErr)
 	}
 
@@ -294,7 +294,7 @@ func TestSignSignatureInvalidWhenRequestTampered(t *testing.T) {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if signErr := Sign(req, priv.Seed(), "org/bot"); signErr != nil {
+	if signErr := Sign(req, priv.Seed(), "org/bot", nil); signErr != nil {
 		t.Fatalf("Sign returned error: %v", signErr)
 	}
 
@@ -343,7 +343,7 @@ func TestSignDifferentKeyDoesNotVerify(t *testing.T) {
 	}
 
 	// Sign with key 2.
-	if signErr := Sign(req, priv2.Seed(), "org/bot"); signErr != nil {
+	if signErr := Sign(req, priv2.Seed(), "org/bot", nil); signErr != nil {
 		t.Fatalf("Sign returned error: %v", signErr)
 	}
 
@@ -386,7 +386,7 @@ func TestSignCoversMethodTargetUriAuthority(t *testing.T) {
 		t.Fatalf("creating request: %v", err)
 	}
 
-	if signErr := Sign(req, priv.Seed(), "testorg/testbot"); signErr != nil {
+	if signErr := Sign(req, priv.Seed(), "testorg/testbot", nil); signErr != nil {
 		t.Fatalf("Sign returned error: %v", signErr)
 	}
 
