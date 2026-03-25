@@ -155,7 +155,7 @@ func printInboxTable(w io.Writer, data []byte) error {
 }
 func init() {
 	inboxCmd.Flags().StringVar(&directionFlag, "direction", "", "filter by message direction")
-	inboxCmd.Flags().StringVar(&statusFlag, "status", "", "filter by message status")
+	inboxCmd.Flags().StringVar(&statusFlag, "status", "all", "filter by message status (unread, read, all)")
 	inboxCmd.Flags().IntVar(&pageFlag, "page", 1, "page number")
 	inboxCmd.Flags().IntVar(&limitFlag, "limit", 20, "number of messages per page")
 	inboxCmd.Flags().StringVar(&orderFlag, "order", "desc", "sort order (asc or desc)")

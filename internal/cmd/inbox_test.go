@@ -19,7 +19,7 @@ import (
 func resetInboxFlags() {
 	homeFlag = ""
 	directionFlag = ""
-	statusFlag = ""
+	statusFlag = "all"
 	pageFlag = 1
 	limitFlag = 20
 	orderFlag = "desc"
@@ -424,12 +424,13 @@ func TestInboxDefaultQueryParams(t *testing.T) {
 		t.Errorf("default query order = %q, want 'desc'", v)
 	}
 
-	// direction and status should not be present when not set.
+	// direction should not be present when not set.
 	if v := capturedQuery.Get("direction"); v != "" {
 		t.Errorf("default query direction = %q, want empty (not present)", v)
 	}
-	if v := capturedQuery.Get("status"); v != "" {
-		t.Errorf("default query status = %q, want empty (not present)", v)
+	// status defaults to "all".
+	if v := capturedQuery.Get("status"); v != "all" {
+		t.Errorf("default query status = %q, want 'all'", v)
 	}
 }
 
