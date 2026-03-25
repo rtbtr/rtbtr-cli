@@ -6,6 +6,9 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -51,6 +54,21 @@ func resetVerifyFlags() {
 	}
 }
 
+// setupVerifyMock starts a mock server returning the given public key and
+// overrides apiBaseURL. Returns cleanup via t.Cleanup.
+func setupVerifyMock(t *testing.T, pub ed25519.PublicKey) {
+	t.Helper()
+	pubB64 := base64.RawURLEncoding.EncodeToString([]byte(pub))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"bot_id":"test-id","org":"test-org","public_key":"%s","description":"","created_at":"2026-01-01T00:00:00Z"}`, pubB64)
+	}))
+	t.Cleanup(server.Close)
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	t.Cleanup(func() { apiBaseURL = oldBaseURL })
+}
+
 func TestVerifyValidSignature(t *testing.T) {
 	resetVerifyFlags()
 
@@ -58,18 +76,17 @@ func TestVerifyValidSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
+	setupVerifyMock(t, pub)
 
 	message := []byte("deploy v2.3.0\n")
 	sig := ed25519.Sign(priv, message)
-
-	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", sigB64})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("verify returned error: %v", err)
@@ -88,21 +105,20 @@ func TestVerifyInvalidSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
+	setupVerifyMock(t, pub)
 
 	message := []byte("deploy v2.3.0\n")
 	fakeSig := make([]byte, ed25519.SignatureSize)
 	for i := range fakeSig {
 		fakeSig[i] = byte(i)
 	}
-
-	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(fakeSig)
 
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", sigB64})
 
 	err = rootCmd.Execute()
 	if !errors.Is(err, ErrInvalidSignature) {
@@ -115,24 +131,23 @@ func TestVerifyInvalidSignature(t *testing.T) {
 	}
 }
 
-func TestVerifyRejectsInvalidKey(t *testing.T) {
+func TestVerifyRejectsInvalidKeyFormat(t *testing.T) {
 	resetVerifyFlags()
 
-	badKey := "not-valid-base64!@#$%"
 	sigB64 := base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 
 	stdin := bytes.NewReader([]byte("some data"))
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", badKey, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "noslash", "--signature", sigB64})
 
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Fatal("verify should return error for malformed public key")
+		t.Fatal("verify should return error for key without org/bot format")
 	}
-	if !strings.Contains(err.Error(), "public key") {
-		t.Errorf("error = %q, want it to mention 'public key'", err.Error())
+	if !strings.Contains(err.Error(), "org/bot") {
+		t.Errorf("error = %q, want it to mention org/bot", err.Error())
 	}
 }
 
@@ -143,7 +158,7 @@ func TestVerifyRejectsInvalidSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
-	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
+	setupVerifyMock(t, pub)
 
 	badSig := "not-valid-base64!@#$%"
 
@@ -151,7 +166,7 @@ func TestVerifyRejectsInvalidSignature(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", badSig})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", badSig})
 
 	err = rootCmd.Execute()
 	if err == nil {
@@ -169,11 +184,10 @@ func TestVerifyRejectsOversizedInput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
+	setupVerifyMock(t, pub)
 
 	message := []byte("small")
 	sig := ed25519.Sign(priv, message)
-
-	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
 	oversized := make([]byte, maxVerifyInputBytes+1)
@@ -185,7 +199,7 @@ func TestVerifyRejectsOversizedInput(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", sigB64})
 
 	err = rootCmd.Execute()
 	if err == nil {
@@ -200,6 +214,8 @@ func TestSignVerifyRoundtrip(t *testing.T) {
 	resetSignFlags()
 
 	homePath, pub := setupSignHome(t)
+	setupVerifyMock(t, pub)
+
 	message := []byte("deploy v2.3.0\n")
 
 	// Sign.
@@ -217,13 +233,12 @@ func TestSignVerifyRoundtrip(t *testing.T) {
 
 	// Verify.
 	resetVerifyFlags()
-	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 
 	verifyStdin := bytes.NewReader(message)
 	verifyStdout := new(bytes.Buffer)
 	rootCmd.SetIn(verifyStdin)
 	rootCmd.SetOut(verifyStdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", sigB64})
 
 	if err := rootCmd.Execute(); err != nil {
 		t.Fatalf("verify returned error: %v", err)
@@ -247,18 +262,17 @@ func TestVerifyWrongKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating wrong keypair: %v", err)
 	}
+	setupVerifyMock(t, wrongPub)
 
 	message := []byte("deploy v2.3.0\n")
 	sig := ed25519.Sign(priv, message)
-
-	keyB64 := base64.RawURLEncoding.EncodeToString(wrongPub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", sigB64})
 
 	err = rootCmd.Execute()
 	if !errors.Is(err, ErrInvalidSignature) {
@@ -278,16 +292,16 @@ func TestVerifyRejectsEmptyStdin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
+	setupVerifyMock(t, pub)
 
 	sig := ed25519.Sign(priv, []byte("data"))
-	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
 	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
 
 	stdin := bytes.NewReader([]byte{})
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", sigB64})
 
 	err = rootCmd.Execute()
 	if err == nil {
@@ -298,25 +312,32 @@ func TestVerifyRejectsEmptyStdin(t *testing.T) {
 	}
 }
 
-func TestVerifyRejectsWrongLengthKey(t *testing.T) {
+func TestVerifySignerNotFound(t *testing.T) {
 	resetVerifyFlags()
 
-	shortKey := make([]byte, 16)
-	keyB64 := base64.RawURLEncoding.EncodeToString(shortKey)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"error":"not found"}`))
+	}))
+	defer server.Close()
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
 	sigB64 := base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 
 	stdin := bytes.NewReader([]byte("some data"))
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "no-org/no-bot", "--signature", sigB64})
 
 	err := rootCmd.Execute()
 	if err == nil {
-		t.Fatal("verify should return error for wrong-length public key")
+		t.Fatal("verify should return error for unknown signer")
 	}
-	if !strings.Contains(err.Error(), "invalid public key length") {
-		t.Errorf("error = %q, want it to mention 'invalid public key length'", err.Error())
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("error = %q, want it to mention not found", err.Error())
 	}
 }
 
@@ -327,7 +348,7 @@ func TestVerifyRejectsWrongLengthSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
-	keyB64 := base64.RawURLEncoding.EncodeToString(pub)
+	setupVerifyMock(t, pub)
 
 	shortSig := make([]byte, 32)
 	sigB64 := base64.RawURLEncoding.EncodeToString(shortSig)
@@ -336,7 +357,7 @@ func TestVerifyRejectsWrongLengthSignature(t *testing.T) {
 	stdout := new(bytes.Buffer)
 	rootCmd.SetIn(stdin)
 	rootCmd.SetOut(stdout)
-	rootCmd.SetArgs([]string{"verify", "--key", keyB64, "--signature", sigB64})
+	rootCmd.SetArgs([]string{"verify", "--key", "test-org/test-bot", "--signature", sigB64})
 
 	err = rootCmd.Execute()
 	if err == nil {

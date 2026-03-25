@@ -28,10 +28,8 @@ var encryptCmd = &cobra.Command{
 	Short: "Encrypt a message for a recipient",
 	Long: `Encrypt a message using X25519 ECDH + AES-256-GCM.
 
-The recipient can be specified as org/bot (fetches the public key from the
-rtbtr API) or as a raw Ed25519 public key (URL-safe base64, no padding).
-
-The message can be provided via --message or piped from stdin.
+Specify the recipient as org/bot. The public key is fetched from the
+rtbtr API. The message can be provided via --message or piped from stdin.
 
 Outputs a JSON envelope to stdout containing:
   - ciphertext (standard base64)
@@ -42,13 +40,17 @@ Outputs a JSON envelope to stdout containing:
 }
 
 func runEncrypt(cmd *cobra.Command, args []string) error {
-	if encryptToFlag == "" {
-		return errors.New("recipient required: use --to org/bot or --to <public-key>")
-	}
-
-	recipientEd25519, err := resolvePublicKey(cmd, encryptToFlag)
+	org, bot, err := parseRecipient(encryptToFlag)
 	if err != nil {
 		return err
+	}
+
+	recipientEd25519, err := rtbtrcrypto.FetchRecipientKey(cmd.Context(), apiBaseURL, org, bot)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return fmt.Errorf("recipient %s/%s not found", org, bot)
+		}
+		return fmt.Errorf("fetching recipient key: %w", err)
 	}
 
 	message, err := resolveMessageInput(cmd, encryptMessageFlag)
@@ -84,35 +86,11 @@ func runEncrypt(cmd *cobra.Command, args []string) error {
 	return err
 }
 
-// resolvePublicKey accepts either "org/bot" (fetches from API) or a raw
-// Ed25519 public key (URL-safe base64). Returns the 32-byte Ed25519 key.
-func resolvePublicKey(cmd *cobra.Command, value string) ([]byte, error) {
-	if strings.Contains(value, "/") {
-		org, bot, err := parseRecipient(value)
-		if err != nil {
-			return nil, err
-		}
-		key, err := rtbtrcrypto.FetchRecipientKey(cmd.Context(), apiBaseURL, org, bot)
-		if err != nil {
-			if strings.Contains(err.Error(), "not found") {
-				return nil, fmt.Errorf("recipient %s not found", value)
-			}
-			return nil, fmt.Errorf("fetching recipient key: %w", err)
-		}
-		return key, nil
-	}
-
-	key, err := base64.RawURLEncoding.DecodeString(value)
-	if err != nil {
-		return nil, fmt.Errorf("invalid public key: %w", err)
-	}
-	if len(key) != 32 {
-		return nil, fmt.Errorf("invalid public key length: got %d bytes, want 32", len(key))
-	}
-	return key, nil
-}
-
 func init() {
-	encryptCmd.Flags().StringVar(&encryptToFlag, "to", "", "recipient as org/bot or Ed25519 public key (URL-safe base64)")
+	encryptCmd.Flags().StringVar(&encryptToFlag, "to", "", "recipient in org/bot format")
 	encryptCmd.Flags().StringVar(&encryptMessageFlag, "message", "", "message content to encrypt")
+
+	if err := encryptCmd.MarkFlagRequired("to"); err != nil {
+		panic(err)
+	}
 }
