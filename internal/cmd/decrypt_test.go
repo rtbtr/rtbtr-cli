@@ -522,7 +522,32 @@ func TestDecryptRejectsPositionalArgs(t *testing.T) {
 	}
 }
 
-// T-DEC13: decrypt roundtrip with empty-string plaintext (after encryption).
+// T-DEC13: decrypt rejects terminal stdin without --payload.
+func TestDecryptRejectsTerminalStdinWithoutPayload(t *testing.T) {
+	resetDecryptFlags()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
+
+	oldStdin := stdinIsTerminal
+	stdinIsTerminal = func() bool { return true }
+	defer func() { stdinIsTerminal = oldStdin }()
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"decrypt", "--home", homePath})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("decrypt should reject when stdin is terminal and --payload is absent")
+	}
+	if !strings.Contains(err.Error(), "payload") {
+		t.Errorf("error = %q, want it to mention 'payload'", err.Error())
+	}
+}
+
+// T-DEC14: decrypt roundtrip with empty-string plaintext (after encryption).
 func TestDecryptRoundtripEmptyPlaintext(t *testing.T) {
 	resetDecryptFlags()
 
