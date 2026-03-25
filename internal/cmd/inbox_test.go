@@ -437,7 +437,7 @@ func TestInboxDefaultQueryParams(t *testing.T) {
 func TestInboxJsonFlagOutputsRawBody(t *testing.T) {
 	resetInboxFlags()
 
-	responseBody := `[{"id":"msg-abc","sender":"org1/bot1","recipient":"org2/bot2","status":"delivered","created_at":"2026-03-01T12:00:00Z"}]`
+	responseBody := `[{"id":"msg-abc","sender":{"org":"org1","name":"bot1"},"recipient":{"org":"org2","name":"bot2"},"status":"delivered","created_at":"2026-03-01T12:00:00Z","payload_size":128}]`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -469,8 +469,8 @@ func TestInboxJsonFlagOutputsRawBody(t *testing.T) {
 	if !strings.Contains(output, "delivered") {
 		t.Errorf("--json output missing status: %q", output)
 	}
-	if !strings.Contains(output, "org1/bot1") {
-		t.Errorf("--json output missing sender: %q", output)
+	if !strings.Contains(output, "org1") || !strings.Contains(output, "bot1") {
+		t.Errorf("--json output missing sender identity: %q", output)
 	}
 }
 
@@ -478,7 +478,7 @@ func TestInboxJsonFlagOutputsRawBody(t *testing.T) {
 func TestInboxTableOutputFormat(t *testing.T) {
 	resetInboxFlags()
 
-	responseBody := `[{"id":"msg-12345678","sender":"org1/bot1","recipient":"org2/bot2","status":"delivered","created_at":"2026-03-01T12:00:00Z"}]`
+	responseBody := `[{"id":"msg-12345678","sender":{"org":"org1","name":"bot1"},"recipient":{"org":"org2","name":"bot2"},"status":"delivered","created_at":"2026-03-01T12:00:00Z","payload_size":128}]`
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

@@ -29,12 +29,22 @@ var (
 	jsonFlag      bool
 )
 
+type botIdentity struct {
+	Org  string `json:"org"`
+	Name string `json:"name"`
+}
+
+func (b botIdentity) String() string {
+	return b.Org + "/" + b.Name
+}
+
 type inboxMessage struct {
-	ID        string `json:"id"`
-	Sender    string `json:"sender"`
-	Recipient string `json:"recipient"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
+	ID          string      `json:"id"`
+	Sender      botIdentity `json:"sender"`
+	Recipient   botIdentity `json:"recipient"`
+	Status      string      `json:"status"`
+	CreatedAt   string      `json:"created_at"`
+	PayloadSize int         `json:"payload_size"`
 }
 
 var inboxCmd = &cobra.Command{
