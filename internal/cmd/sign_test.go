@@ -37,8 +37,8 @@ func resetSignFlags() {
 }
 
 // setupSignHome creates a .rtbtr directory with a valid Ed25519 keypair
-// and returns the home path, public key bytes, and seed bytes.
-func setupSignHome(t *testing.T) (string, ed25519.PublicKey, []byte) {
+// and returns the home path and public key bytes.
+func setupSignHome(t *testing.T) (string, ed25519.PublicKey) {
 	t.Helper()
 
 	dir := t.TempDir()
@@ -60,13 +60,13 @@ func setupSignHome(t *testing.T) (string, ed25519.PublicKey, []byte) {
 		t.Fatalf("writing public_key: %v", err)
 	}
 
-	return homePath, pub, seed
+	return homePath, pub
 }
 
 func TestSignProducesValidSignature(t *testing.T) {
 	resetSignFlags()
 
-	homePath, pub, _ := setupSignHome(t)
+	homePath, pub := setupSignHome(t)
 	message := []byte("deploy v2.3.0\n")
 
 	stdin := bytes.NewReader(message)
@@ -121,7 +121,7 @@ func TestSignRequiresPrivateKey(t *testing.T) {
 func TestSignRejectsEmptyStdin(t *testing.T) {
 	resetSignFlags()
 
-	homePath, _, _ := setupSignHome(t)
+	homePath, _ := setupSignHome(t)
 
 	stdin := bytes.NewReader([]byte{})
 	stdout := new(bytes.Buffer)
@@ -141,7 +141,7 @@ func TestSignRejectsEmptyStdin(t *testing.T) {
 func TestSignRejectsOversizedInput(t *testing.T) {
 	resetSignFlags()
 
-	homePath, _, _ := setupSignHome(t)
+	homePath, _ := setupSignHome(t)
 
 	oversized := make([]byte, maxSignInputBytes+1)
 	for i := range oversized {
@@ -166,7 +166,7 @@ func TestSignRejectsOversizedInput(t *testing.T) {
 func TestSignOutputIsURLSafeBase64(t *testing.T) {
 	resetSignFlags()
 
-	homePath, _, _ := setupSignHome(t)
+	homePath, _ := setupSignHome(t)
 
 	stdin := bytes.NewReader([]byte("test payload"))
 	stdout := new(bytes.Buffer)

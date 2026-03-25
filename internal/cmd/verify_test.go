@@ -218,7 +218,7 @@ func TestVerifyRejectsOversizedInput(t *testing.T) {
 func TestSignVerifyRoundtrip(t *testing.T) {
 	resetSignFlags()
 
-	homePath, pub, _ := setupSignHome(t)
+	homePath, pub := setupSignHome(t)
 	message := []byte("deploy v2.3.0\n")
 
 	// Sign.
