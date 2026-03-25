@@ -22,7 +22,7 @@
 - [tested] I-03: inbox loads config.yaml from .rtbtr and rejects with "not registered: run rtbtr register first" if org or bot is empty or config.yaml is missing.
 - [tested] I-04: inbox reads the private_key file from .rtbtr, trims whitespace, and base64url-no-pad decodes it to obtain the 32-byte Ed25519 seed; rejects with "private key not found" if the file is missing.
 - [tested] I-05: inbox sends a GET request to {apiBaseURL}/orgs/{org}/bots/{bot}/inbox with Signature-Input and Signature headers produced by signing.Sign using the decoded seed and "{platformBaseURL}/o/{org}/{bot}" as the key ID.
-- [tested] I-06: --direction and --status are optional string flags; when non-empty they are included as query parameters. --page (int, default 1), --limit (int, default 20), and --order (string, default "desc") are always included as query parameters.
+- [tested] I-06: --direction is an optional string flag; when non-empty it is included as a query parameter. --status (string, default "all"), --page (int, default 1), --limit (int, default 20), and --order (string, default "desc") are always included as query parameters.
 - [tested] I-07: --json flag outputs the raw API response body to stdout. When --json is not set, output is a human-readable aligned table (via text/tabwriter) with a header row and one row per message. When the response contains no messages, the table output prints "no messages".
 - [tested] I-08: HTTP 401 maps to error "authentication failed: signature rejected"; HTTP 403 maps to "not authorized to access inbox"; other non-2xx responses map to "inbox failed: {status}: {body}".
 
