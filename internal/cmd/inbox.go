@@ -11,7 +11,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -113,20 +112,9 @@ func buildInboxURL(org, bot, direction, status, order string, page, limit int) s
 	return base + "?" + values.Encode()
 }
 
-func checkInboxStatus(statusCode int, status string, body []byte) error {
-	switch statusCode {
-	case http.StatusUnauthorized:
-		return errors.New("authentication failed: signature rejected")
-	case http.StatusForbidden:
-		return errors.New("not authorized to access inbox")
-	}
-
-	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("inbox failed: %s: %s", status, strings.TrimSpace(string(body)))
-	}
-
-	return nil
-}
+var checkInboxStatus = newStatusChecker("inbox", map[int]string{
+	http.StatusForbidden: "not authorized to access inbox",
+})
 
 func printInboxTable(w io.Writer, data []byte) error {
 	var messages []inboxMessage

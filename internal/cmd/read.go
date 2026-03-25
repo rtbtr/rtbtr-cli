@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
@@ -73,7 +72,7 @@ func runRead(cmd *cobra.Command, args []string) error {
 
 	plaintext, decryptErr := decryptMessageContent(&msg, seed)
 	if readJSONFlag {
-		return writeReadJSONOutput(cmd, body, plaintext, decryptErr)
+		return writeReadJSONOutput(cmd, &msg, plaintext, decryptErr)
 	}
 
 	return writeReadDefaultOutput(cmd, &msg, plaintext, decryptErr)
@@ -126,21 +125,34 @@ func decryptMessageContent(msg *messageDetail, seed []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func writeReadJSONOutput(cmd *cobra.Command, rawBody, plaintext []byte, decryptErr error) error {
-	var payload map[string]any
-	if err := json.Unmarshal(rawBody, &payload); err != nil {
-		return fmt.Errorf("parsing response body: %w", err)
+type readJSONOutput struct {
+	ID           string          `json:"id"`
+	Sender       messageSender   `json:"sender"`
+	Content      *string         `json:"content"`
+	DecryptError *string         `json:"decrypt_error,omitempty"`
+	Encryption   *encryptionMeta `json:"encryption,omitempty"`
+	Status       string          `json:"status"`
+	CreatedAt    string          `json:"created_at"`
+}
+
+func writeReadJSONOutput(cmd *cobra.Command, msg *messageDetail, plaintext []byte, decryptErr error) error {
+	out := readJSONOutput{
+		ID:         msg.ID,
+		Sender:     msg.Sender,
+		Encryption: msg.Encryption,
+		Status:     msg.Status,
+		CreatedAt:  msg.CreatedAt,
 	}
 
-	delete(payload, "encrypted_payload")
 	if decryptErr != nil {
-		payload["content"] = nil
-		payload["decrypt_error"] = decryptErr.Error()
+		errStr := decryptErr.Error()
+		out.DecryptError = &errStr
 	} else {
-		payload["content"] = string(plaintext)
+		content := string(plaintext)
+		out.Content = &content
 	}
 
-	encoded, err := json.Marshal(payload)
+	encoded, err := json.Marshal(out)
 	if err != nil {
 		return fmt.Errorf("encoding JSON output: %w", err)
 	}
@@ -179,24 +191,10 @@ func writeReadDefaultOutput(cmd *cobra.Command, msg *messageDetail, plaintext []
 	return err
 }
 
-func checkReadStatus(statusCode int, status string, body []byte) error {
-	trimmed := strings.TrimSpace(string(body))
-
-	switch statusCode {
-	case http.StatusUnauthorized:
-		return errors.New("authentication failed: signature rejected")
-	case http.StatusForbidden:
-		return errors.New("not authorized to read this message")
-	case http.StatusNotFound:
-		return errors.New("message not found")
-	}
-
-	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("read failed: %s: %s", status, trimmed)
-	}
-
-	return nil
-}
+var checkReadStatus = newStatusChecker("read", map[int]string{
+	http.StatusForbidden: "not authorized to read this message",
+	http.StatusNotFound:  "message not found",
+})
 
 func init() {
 	readCmd.Flags().BoolVar(&readJSONFlag, "json", false, "print raw JSON output with decrypted content")

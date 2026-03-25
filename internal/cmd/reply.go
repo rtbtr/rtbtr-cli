@@ -103,9 +103,15 @@ func postReply(cmd *cobra.Command, cfg *config.Config, seed []byte, msg *message
 	}
 
 	if replyJSONFlag {
-		return writeSendOutput(cmd, responseBody, true, "")
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(responseBody))
+		return err
 	}
-	return writeSendOutput(cmd, responseBody, false, "replied to %s -> sent %s\n", messageID)
+	newID, err := parseSendResponse(responseBody)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "replied to %s -> sent %s\n", messageID, newID)
+	return err
 }
 
 func init() {

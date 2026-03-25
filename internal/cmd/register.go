@@ -176,6 +176,28 @@ func applyRegisterHeaders(req *http.Request, orgToken string) {
 
 type statusChecker func(statusCode int, status string, body []byte) error
 
+// newStatusChecker builds a statusChecker for authenticated endpoints.
+// All authenticated endpoints map 401 to "authentication failed: signature rejected".
+// Additional status codes are mapped via the codes map. If a code's message
+// contains %s, the trimmed response body is interpolated.
+func newStatusChecker(verb string, codes map[int]string) statusChecker {
+	return func(statusCode int, status string, body []byte) error {
+		if statusCode == http.StatusUnauthorized {
+			return errors.New("authentication failed: signature rejected")
+		}
+		if msg, ok := codes[statusCode]; ok {
+			if strings.Contains(msg, "%s") {
+				return fmt.Errorf(msg, strings.TrimSpace(string(body)))
+			}
+			return errors.New(msg)
+		}
+		if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
+			return fmt.Errorf("%s failed: %s: %s", verb, status, strings.TrimSpace(string(body)))
+		}
+		return nil
+	}
+}
+
 func doRequest(req *http.Request, check statusChecker) ([]byte, error) {
 	resp, err := httpClient.Do(req)
 	if err != nil {

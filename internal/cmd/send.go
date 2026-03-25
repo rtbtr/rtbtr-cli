@@ -105,7 +105,16 @@ func runSend(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return writeSendOutput(cmd, responseBody, sendJSONFlag, "sent %s\n")
+	if sendJSONFlag {
+		_, err = fmt.Fprintln(cmd.OutOrStdout(), string(responseBody))
+		return err
+	}
+	messageID, err := parseSendResponse(responseBody)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(cmd.OutOrStdout(), "sent %s\n", messageID)
+	return err
 }
 
 func parseRecipient(value string) (string, string, error) {
@@ -201,40 +210,18 @@ func buildEncryptedRequestBody(message, recipientEd25519Public []byte) ([]byte, 
 	return bodyBytes, nil
 }
 
-func writeSendOutput(cmd *cobra.Command, responseBody []byte, jsonOutput bool, successFormat string, args ...any) error {
-	if jsonOutput {
-		_, err := fmt.Fprintln(cmd.OutOrStdout(), string(responseBody))
-		return err
-	}
-
+func parseSendResponse(responseBody []byte) (string, error) {
 	var response sendResponse
 	if err := json.Unmarshal(responseBody, &response); err != nil {
-		return fmt.Errorf("parsing response body: %w", err)
+		return "", fmt.Errorf("parsing response body: %w", err)
 	}
-
-	values := append(append([]any(nil), args...), response.ID)
-	_, err := fmt.Fprintf(cmd.OutOrStdout(), successFormat, values...)
-	return err
+	return response.ID, nil
 }
 
-func checkSendStatus(statusCode int, status string, body []byte) error {
-	trimmed := strings.TrimSpace(string(body))
-
-	switch statusCode {
-	case http.StatusUnauthorized:
-		return errors.New("authentication failed: signature rejected")
-	case http.StatusNotFound:
-		return errors.New("recipient not found")
-	case http.StatusUnprocessableEntity:
-		return fmt.Errorf("invalid message: %s", trimmed)
-	}
-
-	if statusCode < http.StatusOK || statusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("send failed: %s: %s", status, trimmed)
-	}
-
-	return nil
-}
+var checkSendStatus = newStatusChecker("send", map[int]string{
+	http.StatusNotFound:            "recipient not found",
+	http.StatusUnprocessableEntity: "invalid message: %s",
+})
 
 func init() {
 	sendCmd.Flags().StringVar(&sendToFlag, "to", "", "recipient in org/bot format")
