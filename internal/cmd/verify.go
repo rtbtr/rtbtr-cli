@@ -26,8 +26,10 @@ var verifyCmd = &cobra.Command{
 	Short: "Verify an Ed25519 signature against a public key",
 	Long: `Verify an Ed25519 signature against a public key.
 
-Content to verify is read from stdin (max 1MB). The public key and
-signature are provided as URL-safe base64 (no padding) via flags.
+The signer's key can be specified as org/bot (fetches the public key from
+the rtbtr API) or as a raw Ed25519 public key (URL-safe base64, no padding).
+
+Content to verify is read from stdin (max 1MB).
 
 Prints "valid" and exits 0 if the signature is good.
 Prints "invalid" and exits 1 if the signature is bad.`,
@@ -36,9 +38,9 @@ Prints "invalid" and exits 1 if the signature is bad.`,
 }
 
 func runVerify(cmd *cobra.Command, args []string) error {
-	pubBytes, err := base64.RawURLEncoding.DecodeString(verifyKeyFlag)
+	pubBytes, err := resolvePublicKey(cmd, verifyKeyFlag)
 	if err != nil {
-		return fmt.Errorf("decoding public key: %w", err)
+		return err
 	}
 	if len(pubBytes) != ed25519.PublicKeySize {
 		return fmt.Errorf("invalid public key length: got %d bytes, want %d", len(pubBytes), ed25519.PublicKeySize)
@@ -74,7 +76,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
-	verifyCmd.Flags().StringVar(&verifyKeyFlag, "key", "", "signer's Ed25519 public key (URL-safe base64, no padding)")
+	verifyCmd.Flags().StringVar(&verifyKeyFlag, "key", "", "signer as org/bot or Ed25519 public key (URL-safe base64)")
 	verifyCmd.Flags().StringVar(&verifySignatureFlag, "signature", "", "signature to verify (URL-safe base64, no padding)")
 
 	if err := verifyCmd.MarkFlagRequired("key"); err != nil {

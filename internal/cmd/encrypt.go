@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -24,33 +25,30 @@ type encryptEnvelope struct {
 
 var encryptCmd = &cobra.Command{
 	Use:   "encrypt",
-	Short: "Encrypt a message for a recipient's Ed25519 public key",
+	Short: "Encrypt a message for a recipient",
 	Long: `Encrypt a message using X25519 ECDH + AES-256-GCM.
 
-Accepts the recipient's Ed25519 public key (URL-safe base64, no padding)
-via --to. The message can be provided via --message or piped from stdin.
+The recipient can be specified as org/bot (fetches the public key from the
+rtbtr API) or as a raw Ed25519 public key (URL-safe base64, no padding).
+
+The message can be provided via --message or piped from stdin.
 
 Outputs a JSON envelope to stdout containing:
   - ciphertext (standard base64)
   - ephemeral_public_key (URL-safe base64, no padding)
-  - algorithm ("x25519-aes256gcm")
-
-This command is fully offline — no private key or .rtbtr directory is needed.`,
+  - algorithm ("x25519-aes256gcm")`,
 	Args: cobra.NoArgs,
 	RunE: runEncrypt,
 }
 
 func runEncrypt(cmd *cobra.Command, args []string) error {
 	if encryptToFlag == "" {
-		return errors.New("recipient required: use --to <ed25519-public-key>")
+		return errors.New("recipient required: use --to org/bot or --to <public-key>")
 	}
 
-	recipientEd25519, err := base64.RawURLEncoding.DecodeString(encryptToFlag)
+	recipientEd25519, err := resolvePublicKey(cmd, encryptToFlag)
 	if err != nil {
-		return fmt.Errorf("invalid recipient public key: %w", err)
-	}
-	if len(recipientEd25519) != 32 {
-		return fmt.Errorf("invalid recipient public key length: got %d bytes, want 32", len(recipientEd25519))
+		return err
 	}
 
 	message, err := resolveMessageInput(cmd, encryptMessageFlag)
@@ -86,7 +84,35 @@ func runEncrypt(cmd *cobra.Command, args []string) error {
 	return err
 }
 
+// resolvePublicKey accepts either "org/bot" (fetches from API) or a raw
+// Ed25519 public key (URL-safe base64). Returns the 32-byte Ed25519 key.
+func resolvePublicKey(cmd *cobra.Command, value string) ([]byte, error) {
+	if strings.Contains(value, "/") {
+		org, bot, err := parseRecipient(value)
+		if err != nil {
+			return nil, err
+		}
+		key, err := rtbtrcrypto.FetchRecipientKey(cmd.Context(), apiBaseURL, org, bot)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return nil, fmt.Errorf("recipient %s not found", value)
+			}
+			return nil, fmt.Errorf("fetching recipient key: %w", err)
+		}
+		return key, nil
+	}
+
+	key, err := base64.RawURLEncoding.DecodeString(value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid public key: %w", err)
+	}
+	if len(key) != 32 {
+		return nil, fmt.Errorf("invalid public key length: got %d bytes, want 32", len(key))
+	}
+	return key, nil
+}
+
 func init() {
-	encryptCmd.Flags().StringVar(&encryptToFlag, "to", "", "recipient Ed25519 public key (URL-safe base64)")
+	encryptCmd.Flags().StringVar(&encryptToFlag, "to", "", "recipient as org/bot or Ed25519 public key (URL-safe base64)")
 	encryptCmd.Flags().StringVar(&encryptMessageFlag, "message", "", "message content to encrypt")
 }
