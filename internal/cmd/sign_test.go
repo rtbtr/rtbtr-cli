@@ -163,6 +163,59 @@ func TestSignRejectsOversizedInput(t *testing.T) {
 	}
 }
 
+func TestSignRejectsMalformedPrivateKey(t *testing.T) {
+	// A private_key file that is valid base64 but decodes to the wrong
+	// number of bytes (not ed25519.SeedSize == 32) must produce a
+	// user-facing error, not a panic from ed25519.NewKeyFromSeed.
+	tests := []struct {
+		name    string
+		seedLen int
+	}{
+		{"too_short_16_bytes", 16},
+		{"too_long_64_bytes", 64},
+		{"single_byte", 1},
+		{"zero_bytes", 0},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resetSignFlags()
+
+			dir := t.TempDir()
+			homePath := filepath.Join(dir, ".rtbtr")
+			if err := os.MkdirAll(homePath, 0o755); err != nil {
+				t.Fatalf("creating home directory: %v", err)
+			}
+
+			// Write a private_key file with valid base64 but wrong seed length.
+			badSeed := make([]byte, tc.seedLen)
+			for i := range badSeed {
+				badSeed[i] = byte(i)
+			}
+			encoded := base64.RawURLEncoding.EncodeToString(badSeed)
+			if err := os.WriteFile(filepath.Join(homePath, "private_key"), []byte(encoded), 0o600); err != nil {
+				t.Fatalf("writing private_key: %v", err)
+			}
+
+			stdin := bytes.NewReader([]byte("payload to sign"))
+			stdout := new(bytes.Buffer)
+			rootCmd.SetIn(stdin)
+			rootCmd.SetOut(stdout)
+			rootCmd.SetArgs([]string{"sign", "--home", homePath})
+
+			err := rootCmd.Execute()
+			if err == nil {
+				t.Fatalf("sign should return error for malformed private key (%d bytes seed), got nil", tc.seedLen)
+			}
+			// The error should mention the private key issue, not be a panic.
+			errMsg := err.Error()
+			if !strings.Contains(errMsg, "private key") && !strings.Contains(errMsg, "seed") && !strings.Contains(errMsg, "invalid") {
+				t.Errorf("error = %q, want it to mention private key / seed / invalid", errMsg)
+			}
+		})
+	}
+}
+
 func TestSignOutputIsURLSafeBase64(t *testing.T) {
 	resetSignFlags()
 
