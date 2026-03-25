@@ -67,5 +67,4 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 
 func init() {
 	whoamiCmd.Flags().BoolVar(&whoamiJSONFlag, "json", false, "output as JSON")
-	rootCmd.AddCommand(whoamiCmd)
 }
