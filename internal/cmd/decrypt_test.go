@@ -56,9 +56,9 @@ func buildEncryptEnvelope(t *testing.T, plaintext []byte, recipientSeed []byte) 
 	}
 
 	envelope := map[string]string{
-		"ciphertext":          base64.StdEncoding.EncodeToString(ciphertext),
+		"ciphertext":           base64.StdEncoding.EncodeToString(ciphertext),
 		"ephemeral_public_key": base64.RawURLEncoding.EncodeToString(ephPub),
-		"algorithm":           "x25519-aes256gcm",
+		"algorithm":            "x25519-aes256gcm",
 	}
 
 	data, err := json.Marshal(envelope)
