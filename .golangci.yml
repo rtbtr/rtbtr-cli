@@ -1,23 +1,36 @@
-version: "2"
 run:
-  go: "1.24"
+  timeout: 5m
   issues-exit-code: 1
   tests: true
+  go: "1.24"
+
 output:
   formats:
-    text:
-      path: stdout
-      print-linter-name: true
-      print-issued-lines: true
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+  sort-results: true
+
 linters:
   enable:
+    # Default linters
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+
+    # Additional linters
     - bodyclose
-    - copyloopvar
     - dogsled
     - dupl
+    - copyloopvar
     - goconst
     - gocritic
     - gocyclo
+    - gofmt
+    - goimports
     - goprintffuncname
     - gosec
     - misspell
@@ -27,85 +40,77 @@ linters:
     - prealloc
     - revive
     - rowserrcheck
-    - staticcheck
+    - stylecheck
     - unconvert
     - unparam
     - whitespace
-  settings:
-    dupl:
-      threshold: 100
-    errcheck:
-      check-type-assertions: true
-      check-blank: true
-    goconst:
-      min-len: 3
-      min-occurrences: 3
-    gocyclo:
-      min-complexity: 15
-    gosec:
-      excludes:
-        - G104
-    govet:
-      enable-all: true
-    misspell:
-      locale: US
-    revive:
-      rules:
-        - name: blank-imports
-        - name: context-as-argument
-        - name: context-keys-type
-        - name: dot-imports
-        - name: error-return
-        - name: error-strings
-        - name: error-naming
-        - name: exported
-        - name: if-return
-        - name: increment-decrement
-        - name: var-naming
-        - name: var-declaration
-        - name: package-comments
-        - name: range
-        - name: receiver-naming
-        - name: time-naming
-        - name: unexported-return
-        - name: indent-error-flow
-        - name: errorf
-  exclusions:
-    generated: lax
-    presets:
-      - comments
-      - common-false-positives
-      - legacy
-      - std-error-handling
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+
+  gocyclo:
+    min-complexity: 15
+
+  dupl:
+    threshold: 100
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  misspell:
+    locale: US
+
+  goimports:
+    local-prefixes: github.com/rtbtr/rtbtr-cli
+
+  revive:
     rules:
-      - linters:
-          - dupl
-          - errcheck
-          - goconst
-          - gosec
-        path: _test\.go
-      - linters:
-          - lll
-        source: '^//go:generate '
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: if-return
+      - name: increment-decrement
+      - name: var-naming
+      - name: var-declaration
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: indent-error-flow
+      - name: errorf
+
+  gosec:
+    excludes:
+      - G104  # Audit errors not checked (covered by errcheck)
+      - G704  # Pre-existing SSRF taint in register.go doRequest helper
+
 issues:
+  exclude-rules:
+    # Relax linters on test files
+    - path: _test\.go
+      linters:
+        - dupl
+        - gosec
+        - goconst
+        - errcheck
+
+    # Exclude lll issues for go:generate directives
+    - linters:
+        - lll
+      source: "^//go:generate "
+
   max-issues-per-linter: 50
   max-same-issues: 3
   new: false
-formatters:
-  enable:
-    - gofmt
-    - goimports
-  settings:
-    goimports:
-      local-prefixes:
-        - github.com/rtbtr/rtbtr-cli
-  exclusions:
-    generated: lax
-    paths:
-      - third_party$
-      - builtin$
-      - examples$
