@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
@@ -114,14 +113,7 @@ func resolveDecryptPayload(cmd *cobra.Command) (string, error) {
 }
 
 func loadDecryptPrivateKey(homeDir string) ([]byte, error) {
-	seed, err := loadInboxPrivateKey(homeDir)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.New("private key not found, run rtbtr keygen first")
-		}
-		return nil, err
-	}
-	return seed, nil
+	return home.LoadPrivateKey(homeDir)
 }
 
 func init() {
