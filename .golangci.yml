@@ -94,7 +94,6 @@ linters-settings:
   gosec:
     excludes:
       - G104  # Audit errors not checked (covered by errcheck)
-      - G704  # Pre-existing SSRF taint in register.go doRequest helper
 
 issues:
   exclude-rules:
