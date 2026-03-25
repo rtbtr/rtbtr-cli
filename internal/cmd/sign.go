@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 
@@ -63,19 +61,9 @@ func runSign(cmd *cobra.Command, args []string) error {
 }
 
 func loadSignPrivateKey(homeDir string) ([]byte, error) {
-	path := filepath.Join(homeDir, "private_key")
-	data, err := os.ReadFile(path)
+	seed, err := loadInboxPrivateKey(homeDir)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, errors.New("private key not found, run rtbtr keygen first")
-		}
-		return nil, fmt.Errorf("reading private key: %w", err)
-	}
-
-	raw := string(data)
-	seed, err := base64.RawURLEncoding.DecodeString(raw)
-	if err != nil {
-		return nil, fmt.Errorf("decoding private key: %w", err)
+		return nil, err
 	}
 
 	if len(seed) != ed25519.SeedSize {
