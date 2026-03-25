@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/spf13/cobra"
 
@@ -72,23 +70,6 @@ func runEncrypt(cmd *cobra.Command, args []string) error {
 
 	_, err = fmt.Fprintln(cmd.OutOrStdout(), string(output))
 	return err
-}
-
-// resolveEncryptStdinInput reads plaintext from stdin for the encrypt command.
-func resolveEncryptStdinInput(cmd *cobra.Command) ([]byte, error) {
-	if stdinIsTerminal() {
-		return nil, errors.New("message required: use --message or pipe to stdin")
-	}
-
-	message, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), maxMessageBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("reading stdin: %w", err)
-	}
-	if len(bytes.TrimSpace(message)) == 0 {
-		return nil, errors.New("message cannot be empty")
-	}
-
-	return message, nil
 }
 
 func init() {

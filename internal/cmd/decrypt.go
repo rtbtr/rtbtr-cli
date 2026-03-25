@@ -39,7 +39,7 @@ func runDecrypt(cmd *cobra.Command, args []string) error {
 	}
 
 	var envelope decryptInputEnvelope
-	if err := json.Unmarshal([]byte(payloadStr), &envelope); err != nil {
+	if err = json.Unmarshal([]byte(payloadStr), &envelope); err != nil {
 		return fmt.Errorf("parsing payload JSON: %w", err)
 	}
 
