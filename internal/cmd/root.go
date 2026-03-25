@@ -35,4 +35,6 @@ func init() {
 	rootCmd.AddCommand(sendCmd)
 	rootCmd.AddCommand(readCmd)
 	rootCmd.AddCommand(replyCmd)
+	rootCmd.AddCommand(signCmd)
+	rootCmd.AddCommand(verifyCmd)
 }
