@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -24,33 +25,32 @@ type encryptEnvelope struct {
 
 var encryptCmd = &cobra.Command{
 	Use:   "encrypt",
-	Short: "Encrypt a message for a recipient's Ed25519 public key",
+	Short: "Encrypt a message for a recipient",
 	Long: `Encrypt a message using X25519 ECDH + AES-256-GCM.
 
-Accepts the recipient's Ed25519 public key (URL-safe base64, no padding)
-via --to. The message can be provided via --message or piped from stdin.
+Specify the recipient as org/bot. The public key is fetched from the
+rtbtr API. The message can be provided via --message or piped from stdin.
 
 Outputs a JSON envelope to stdout containing:
   - ciphertext (standard base64)
   - ephemeral_public_key (URL-safe base64, no padding)
-  - algorithm ("x25519-aes256gcm")
-
-This command is fully offline — no private key or .rtbtr directory is needed.`,
+  - algorithm ("x25519-aes256gcm")`,
 	Args: cobra.NoArgs,
 	RunE: runEncrypt,
 }
 
 func runEncrypt(cmd *cobra.Command, args []string) error {
-	if encryptToFlag == "" {
-		return errors.New("recipient required: use --to <ed25519-public-key>")
+	org, bot, err := parseRecipient(encryptToFlag)
+	if err != nil {
+		return err
 	}
 
-	recipientEd25519, err := base64.RawURLEncoding.DecodeString(encryptToFlag)
+	recipientEd25519, err := rtbtrcrypto.FetchRecipientKey(cmd.Context(), apiBaseURL, org, bot)
 	if err != nil {
-		return fmt.Errorf("invalid recipient public key: %w", err)
-	}
-	if len(recipientEd25519) != 32 {
-		return fmt.Errorf("invalid recipient public key length: got %d bytes, want 32", len(recipientEd25519))
+		if strings.Contains(err.Error(), "not found") {
+			return fmt.Errorf("recipient %s/%s not found", org, bot)
+		}
+		return fmt.Errorf("fetching recipient key: %w", err)
 	}
 
 	message, err := resolveMessageInput(cmd, encryptMessageFlag)
@@ -87,6 +87,10 @@ func runEncrypt(cmd *cobra.Command, args []string) error {
 }
 
 func init() {
-	encryptCmd.Flags().StringVar(&encryptToFlag, "to", "", "recipient Ed25519 public key (URL-safe base64)")
+	encryptCmd.Flags().StringVar(&encryptToFlag, "to", "", "recipient in org/bot format")
 	encryptCmd.Flags().StringVar(&encryptMessageFlag, "message", "", "message content to encrypt")
+
+	if err := encryptCmd.MarkFlagRequired("to"); err != nil {
+		panic(err)
+	}
 }
