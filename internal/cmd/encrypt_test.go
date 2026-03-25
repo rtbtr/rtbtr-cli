@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -430,5 +432,127 @@ func TestEncryptRejectsPositionalArgs(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("encrypt should reject unexpected positional arguments")
+	}
+}
+
+// T-ENC16: encrypt→decrypt CLI roundtrip — the JSON envelope produced by
+// encrypt can be directly consumed by decrypt to recover the original message.
+func TestEncryptDecryptCLIRoundtrip(t *testing.T) {
+	// Generate a recipient Ed25519 keypair.
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generating Ed25519 keypair: %v", err)
+	}
+	pubB64 := base64.RawURLEncoding.EncodeToString([]byte(pub))
+	seed := priv.Seed()
+
+	originalMessage := "roundtrip through encrypt→decrypt CLI"
+
+	// Step 1: encrypt
+	resetEncryptFlags()
+	encBuf := new(bytes.Buffer)
+	rootCmd.SetOut(encBuf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"encrypt", "--to", pubB64, "--message", originalMessage})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("encrypt returned error: %v", err)
+	}
+
+	envelope := strings.TrimSpace(encBuf.String())
+	// Sanity: verify it's valid JSON.
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(envelope), &parsed); err != nil {
+		t.Fatalf("encrypt output is not valid JSON: %v", err)
+	}
+
+	// Step 2: decrypt using the matching private key.
+	dir := t.TempDir()
+	rtbtrDir := filepath.Join(dir, ".rtbtr")
+	if err := os.MkdirAll(rtbtrDir, 0o700); err != nil {
+		t.Fatalf("creating .rtbtr dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rtbtrDir, "config.yaml"), []byte("org: testorg\nbot: testbot\n"), 0o600); err != nil {
+		t.Fatalf("writing config.yaml: %v", err)
+	}
+	encodedSeed := base64.RawURLEncoding.EncodeToString(seed)
+	if err := os.WriteFile(filepath.Join(rtbtrDir, "private_key"), []byte(encodedSeed), 0o600); err != nil {
+		t.Fatalf("writing private_key: %v", err)
+	}
+
+	resetDecryptFlags()
+	decBuf := new(bytes.Buffer)
+	rootCmd.SetOut(decBuf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetArgs([]string{"decrypt", "--payload", envelope, "--home", rtbtrDir})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("decrypt returned error: %v", err)
+	}
+
+	decrypted := strings.TrimSpace(decBuf.String())
+	if decrypted != originalMessage {
+		t.Errorf("roundtrip failed: decrypted = %q, want %q", decrypted, originalMessage)
+	}
+}
+
+// T-ENC17: encrypt→decrypt roundtrip with stdin pipe — encrypt from stdin,
+// decrypt from stdin, verifying the full pipe-friendly workflow.
+func TestEncryptDecryptStdinRoundtrip(t *testing.T) {
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatalf("generating Ed25519 keypair: %v", err)
+	}
+	pubB64 := base64.RawURLEncoding.EncodeToString([]byte(pub))
+	seed := priv.Seed()
+
+	originalMessage := "piped roundtrip message"
+
+	// Step 1: encrypt from stdin.
+	oldStdin := stdinIsTerminal
+	stdinIsTerminal = func() bool { return false }
+	defer func() { stdinIsTerminal = oldStdin }()
+
+	resetEncryptFlags()
+	encBuf := new(bytes.Buffer)
+	rootCmd.SetOut(encBuf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetIn(strings.NewReader(originalMessage))
+	rootCmd.SetArgs([]string{"encrypt", "--to", pubB64})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("encrypt from stdin returned error: %v", err)
+	}
+
+	envelope := strings.TrimSpace(encBuf.String())
+
+	// Step 2: decrypt from stdin.
+	dir := t.TempDir()
+	rtbtrDir := filepath.Join(dir, ".rtbtr")
+	if err := os.MkdirAll(rtbtrDir, 0o700); err != nil {
+		t.Fatalf("creating .rtbtr dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(rtbtrDir, "config.yaml"), []byte("org: testorg\nbot: testbot\n"), 0o600); err != nil {
+		t.Fatalf("writing config.yaml: %v", err)
+	}
+	encodedSeed := base64.RawURLEncoding.EncodeToString(seed)
+	if err := os.WriteFile(filepath.Join(rtbtrDir, "private_key"), []byte(encodedSeed), 0o600); err != nil {
+		t.Fatalf("writing private_key: %v", err)
+	}
+
+	resetDecryptFlags()
+	decBuf := new(bytes.Buffer)
+	rootCmd.SetOut(decBuf)
+	rootCmd.SetErr(new(bytes.Buffer))
+	rootCmd.SetIn(strings.NewReader(envelope))
+	rootCmd.SetArgs([]string{"decrypt", "--home", rtbtrDir})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("decrypt from stdin returned error: %v", err)
+	}
+
+	decrypted := strings.TrimSpace(decBuf.String())
+	if decrypted != originalMessage {
+		t.Errorf("stdin roundtrip failed: decrypted = %q, want %q", decrypted, originalMessage)
 	}
 }
