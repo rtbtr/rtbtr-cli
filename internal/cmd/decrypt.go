@@ -44,8 +44,8 @@ func runDecrypt(cmd *cobra.Command, args []string) error {
 	}
 
 	var envelope decryptEnvelope
-	if err := json.Unmarshal([]byte(payload), &envelope); err != nil {
-		return fmt.Errorf("invalid payload: %w", err)
+	if unmarshalErr := json.Unmarshal([]byte(payload), &envelope); unmarshalErr != nil {
+		return fmt.Errorf("invalid payload: %w", unmarshalErr)
 	}
 
 	if envelope.Ciphertext == "" {

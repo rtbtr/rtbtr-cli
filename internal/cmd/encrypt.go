@@ -1,24 +1,26 @@
 package cmd
 
 import (
-	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 
 	"github.com/spf13/cobra"
 
 	rtbtrcrypto "github.com/rtbtr/rtbtr-cli/internal/crypto"
 )
 
-const maxEncryptBytes = 1 << 20 // 1MB
-
 var (
 	encryptToFlag      string
 	encryptMessageFlag string
 )
+
+type encryptEnvelope struct {
+	Ciphertext         string `json:"ciphertext"`
+	EphemeralPublicKey string `json:"ephemeral_public_key"`
+	Algorithm          string `json:"algorithm"`
+}
 
 var encryptCmd = &cobra.Command{
 	Use:   "encrypt",
@@ -51,11 +53,11 @@ func runEncrypt(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid recipient public key length: got %d bytes, want 32", len(recipientEd25519))
 	}
 
-	message, err := resolveEncryptInput(cmd, encryptMessageFlag)
+	message, err := resolveMessageInput(cmd, encryptMessageFlag)
 	if err != nil {
 		return err
 	}
-	if len(message) > maxEncryptBytes {
+	if len(message) > maxMessageBytes {
 		return errors.New("message too large (max 1MB)")
 	}
 
@@ -69,10 +71,10 @@ func runEncrypt(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("encrypting message: %w", err)
 	}
 
-	envelope := map[string]string{
-		"ciphertext":           base64.StdEncoding.EncodeToString(ciphertext),
-		"ephemeral_public_key": base64.RawURLEncoding.EncodeToString(ephPub),
-		"algorithm":            "x25519-aes256gcm",
+	envelope := encryptEnvelope{
+		Ciphertext:         base64.StdEncoding.EncodeToString(ciphertext),
+		EphemeralPublicKey: base64.RawURLEncoding.EncodeToString(ephPub),
+		Algorithm:          "x25519-aes256gcm",
 	}
 
 	encoded, err := json.Marshal(envelope)
@@ -82,30 +84,6 @@ func runEncrypt(cmd *cobra.Command, args []string) error {
 
 	_, err = fmt.Fprintln(cmd.OutOrStdout(), string(encoded))
 	return err
-}
-
-func resolveEncryptInput(cmd *cobra.Command, flagValue string) ([]byte, error) {
-	if flag := cmd.Flags().Lookup("message"); flag != nil && flag.Changed {
-		message := []byte(flagValue)
-		if len(bytes.TrimSpace(message)) == 0 {
-			return nil, errors.New("message cannot be empty")
-		}
-		return message, nil
-	}
-
-	if stdinIsTerminal() {
-		return nil, errors.New("message required: use --message or pipe to stdin")
-	}
-
-	message, err := io.ReadAll(io.LimitReader(cmd.InOrStdin(), maxEncryptBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("reading stdin: %w", err)
-	}
-	if len(bytes.TrimSpace(message)) == 0 {
-		return nil, errors.New("message cannot be empty")
-	}
-
-	return message, nil
 }
 
 func init() {
