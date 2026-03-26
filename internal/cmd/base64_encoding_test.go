@@ -7,8 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -130,21 +128,6 @@ func TestSignOutputDecodesToValidEd25519Signature(t *testing.T) {
 // Verify: --signature flag must accept standard base64 with padding.
 // ---------------------------------------------------------------------------
 
-// setupVerifyMockStd is like setupVerifyMock but uses standard base64 for
-// the public key in the mock response (matching the server's encoding).
-func setupVerifyMockStd(t *testing.T, pub ed25519.PublicKey) {
-	t.Helper()
-	pubB64 := base64.RawURLEncoding.EncodeToString([]byte(pub))
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"bot_id":"test-id","org":"test-org","public_key":"%s","description":"","created_at":"2026-01-01T00:00:00Z"}`, pubB64)
-	}))
-	t.Cleanup(server.Close)
-	oldBaseURL := apiBaseURL
-	apiBaseURL = server.URL
-	t.Cleanup(func() { apiBaseURL = oldBaseURL })
-}
-
 // TestVerifyAcceptsStdBase64Signature checks that `rtbtr verify` correctly
 // accepts a signature encoded with standard base64 (with padding).
 func TestVerifyAcceptsStdBase64Signature(t *testing.T) {
@@ -154,7 +137,7 @@ func TestVerifyAcceptsStdBase64Signature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
-	setupVerifyMockStd(t, pub)
+	setupVerifyMock(t, pub)
 
 	message := []byte("deploy v2.3.0\n")
 	sig := ed25519.Sign(priv, message)
@@ -188,7 +171,7 @@ func TestVerifyRejectsInvalidStdBase64Signature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
-	setupVerifyMockStd(t, pub)
+	setupVerifyMock(t, pub)
 
 	message := []byte("deploy v2.3.0\n")
 	fakeSig := make([]byte, ed25519.SignatureSize)
@@ -224,7 +207,7 @@ func TestVerifyStdBase64WrongLengthSignature(t *testing.T) {
 	if err != nil {
 		t.Fatalf("generating keypair: %v", err)
 	}
-	setupVerifyMockStd(t, pub)
+	setupVerifyMock(t, pub)
 
 	shortSig := make([]byte, 32)
 	sigB64 := base64.StdEncoding.EncodeToString(shortSig)
@@ -256,7 +239,7 @@ func TestSignVerifyRoundtripStdBase64(t *testing.T) {
 	resetSignFlags()
 
 	homePath, pub := setupSignHome(t)
-	setupVerifyMockStd(t, pub)
+	setupVerifyMock(t, pub)
 
 	message := []byte("roundtrip with standard base64\n")
 
@@ -313,7 +296,7 @@ func TestSignVerifyRoundtripMultipleMessages(t *testing.T) {
 			resetSignFlags()
 
 			homePath, pub := setupSignHome(t)
-			setupVerifyMockStd(t, pub)
+			setupVerifyMock(t, pub)
 
 			// Sign.
 			signStdin := bytes.NewReader([]byte(msg))
