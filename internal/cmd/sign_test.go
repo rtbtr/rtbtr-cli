@@ -80,7 +80,7 @@ func TestSignProducesValidSignature(t *testing.T) {
 	}
 
 	sigB64 := strings.TrimSpace(stdout.String())
-	sigBytes, err := base64.RawURLEncoding.DecodeString(sigB64)
+	sigBytes, err := base64.StdEncoding.DecodeString(sigB64)
 	if err != nil {
 		t.Fatalf("decoding signature: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestSignRejectsMalformedPrivateKey(t *testing.T) {
 	}
 }
 
-func TestSignOutputIsURLSafeBase64(t *testing.T) {
+func TestSignOutputIsStdBase64(t *testing.T) {
 	resetSignFlags()
 
 	homePath, _ := setupSignHome(t)
@@ -232,8 +232,8 @@ func TestSignOutputIsURLSafeBase64(t *testing.T) {
 	}
 
 	output := strings.TrimSuffix(stdout.String(), "\n")
-	if strings.ContainsAny(output, "+/=") {
-		t.Errorf("output contains standard base64 characters: %q", output)
+	if _, err := base64.StdEncoding.DecodeString(output); err != nil {
+		t.Errorf("output is not valid standard base64: %v; output = %q", err, output)
 	}
 	if strings.ContainsAny(output, "\n\r \t") {
 		t.Errorf("output contains unexpected whitespace: %q", output)

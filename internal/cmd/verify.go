@@ -55,7 +55,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid public key length: got %d bytes, want %d", len(pubBytes), ed25519.PublicKeySize)
 	}
 
-	sigBytes, err := base64.RawURLEncoding.DecodeString(verifySignatureFlag)
+	sigBytes, err := base64.StdEncoding.DecodeString(verifySignatureFlag)
 	if err != nil {
 		return fmt.Errorf("decoding signature: %w", err)
 	}
@@ -86,7 +86,7 @@ func runVerify(cmd *cobra.Command, args []string) error {
 
 func init() {
 	verifyCmd.Flags().StringVar(&verifyKeyFlag, "key", "", "signer in org/bot format")
-	verifyCmd.Flags().StringVar(&verifySignatureFlag, "signature", "", "signature to verify (URL-safe base64, no padding)")
+	verifyCmd.Flags().StringVar(&verifySignatureFlag, "signature", "", "signature to verify (standard base64, with padding)")
 
 	if err := verifyCmd.MarkFlagRequired("key"); err != nil {
 		panic(err)
