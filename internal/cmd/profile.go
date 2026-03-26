@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"unicode/utf8"
 
 	"github.com/spf13/cobra"
 
@@ -37,8 +38,8 @@ keypair from the .rtbtr directory.`,
 }
 
 type profileRequest struct {
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+	Description *string `json:"description,omitempty"`
 }
 
 type profileResponse struct {
@@ -65,8 +66,9 @@ func runProfile(cmd *cobra.Command, args []string) error {
 	}
 
 	if descChanged {
-		if len(profileDescriptionFlag) > 500 {
-			return errors.New("description must be 500 characters or fewer")
+		runeCount := utf8.RuneCountInString(profileDescriptionFlag)
+		if runeCount > 500 {
+			return fmt.Errorf("description must be 500 characters or fewer (got %d)", runeCount)
 		}
 	}
 
@@ -77,10 +79,10 @@ func runProfile(cmd *cobra.Command, args []string) error {
 
 	body := profileRequest{}
 	if nameChanged {
-		body.Name = profileNameFlag
+		body.Name = &profileNameFlag
 	}
 	if descChanged {
-		body.Description = profileDescriptionFlag
+		body.Description = &profileDescriptionFlag
 	}
 
 	bodyBytes, err := json.Marshal(body)
@@ -96,7 +98,7 @@ func runProfile(cmd *cobra.Command, args []string) error {
 	req.Header.Set("Content-Type", "application/json")
 
 	keyID := fmt.Sprintf("%s/o/%s/%s", platformBaseURL, cfg.Org, cfg.Bot)
-	if signErr := signing.Sign(req, seed, keyID, nil); signErr != nil {
+	if signErr := signing.Sign(req, seed, keyID, bodyBytes); signErr != nil {
 		return fmt.Errorf("signing request: %w", signErr)
 	}
 
