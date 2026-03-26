@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/rtbtr/rtbtr-cli/internal/config"
 )
 
 // resetProfileFlags resets all flag state between profile tests.
@@ -963,5 +965,152 @@ func TestProfilePatchEndpointUsesConfigIdentity(t *testing.T) {
 	expectedPath := "/orgs/myorg/bots/mybot"
 	if capture.Path != expectedPath {
 		t.Errorf("request path = %q, want %q", capture.Path, expectedPath)
+	}
+}
+
+// T-P21: After a successful rename (--name with --force), local config.yaml
+// must be updated with the new bot name so that subsequent CLI commands
+// (which derive API path and RFC 9421 keyID from config) address/sign
+// as the new identity, not the stale old name.
+func TestProfileRenameUpdatesLocalConfig(t *testing.T) {
+	resetProfileFlags()
+
+	server, _ := setupProfileServer(t, http.StatusOK,
+		`{"name":"renamed-bot","description":"existing desc","org":"testorg"}`)
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "testorg", "old-bot")
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--name", "renamed-bot", "--force", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("profile --name --force returned error: %v", err)
+	}
+
+	// Read back config.yaml and verify bot name was updated.
+	cfg, err := config.Load(homePath)
+	if err != nil {
+		t.Fatalf("loading config after rename: %v", err)
+	}
+	if cfg.Bot != "renamed-bot" {
+		t.Errorf("config.Bot = %q after rename, want %q — stale local identity will cause subsequent commands to address/sign as the old bot name", cfg.Bot, "renamed-bot")
+	}
+}
+
+// T-P21b: After a successful rename, the org field in config.yaml must remain
+// unchanged — only the bot name should be updated.
+func TestProfileRenamePreservesOrg(t *testing.T) {
+	resetProfileFlags()
+
+	server, _ := setupProfileServer(t, http.StatusOK,
+		`{"name":"new-name","description":"","org":"myorg"}`)
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "myorg", "old-name")
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--name", "new-name", "--force", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("profile --name --force returned error: %v", err)
+	}
+
+	cfg, err := config.Load(homePath)
+	if err != nil {
+		t.Fatalf("loading config after rename: %v", err)
+	}
+	if cfg.Org != "myorg" {
+		t.Errorf("config.Org = %q after rename, want %q — org must not change during bot rename", cfg.Org, "myorg")
+	}
+	if cfg.Bot != "new-name" {
+		t.Errorf("config.Bot = %q after rename, want %q", cfg.Bot, "new-name")
+	}
+}
+
+// T-P21c: A description-only update (no --name) must NOT change the bot name
+// in config.yaml — only rename operations should trigger config rewrite.
+func TestProfileDescriptionOnlyDoesNotChangeBotName(t *testing.T) {
+	resetProfileFlags()
+
+	server, _ := setupProfileServer(t, http.StatusOK,
+		`{"name":"testbot","description":"new desc","org":"testorg"}`)
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--description", "new desc", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("profile --description returned error: %v", err)
+	}
+
+	cfg, err := config.Load(homePath)
+	if err != nil {
+		t.Fatalf("loading config after description update: %v", err)
+	}
+	if cfg.Bot != "testbot" {
+		t.Errorf("config.Bot = %q after description-only update, want %q — bot name should not change", cfg.Bot, "testbot")
+	}
+	if cfg.Org != "testorg" {
+		t.Errorf("config.Org = %q after description-only update, want %q", cfg.Org, "testorg")
+	}
+}
+
+// T-P21d: When rename fails (server returns non-2xx), local config.yaml must NOT
+// be modified — partial rename must not corrupt local state.
+func TestProfileRenameFailureDoesNotUpdateConfig(t *testing.T) {
+	resetProfileFlags()
+
+	// Server returns 409 Conflict — name is taken.
+	server, _ := setupProfileServer(t, http.StatusConflict, `{"error":"name taken"}`)
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "testorg", "original-bot")
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--name", "taken-name", "--force", "--home", homePath})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("profile --name --force with 409 should return error")
+	}
+
+	// Config must still have the original bot name.
+	cfg, loadErr := config.Load(homePath)
+	if loadErr != nil {
+		t.Fatalf("loading config after failed rename: %v", loadErr)
+	}
+	if cfg.Bot != "original-bot" {
+		t.Errorf("config.Bot = %q after failed rename, want %q — failed rename must not change local config", cfg.Bot, "original-bot")
 	}
 }
