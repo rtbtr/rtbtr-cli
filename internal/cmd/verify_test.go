@@ -80,7 +80,7 @@ func TestVerifyValidSignature(t *testing.T) {
 
 	message := []byte("deploy v2.3.0\n")
 	sig := ed25519.Sign(priv, message)
-	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
 
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
@@ -112,7 +112,7 @@ func TestVerifyInvalidSignature(t *testing.T) {
 	for i := range fakeSig {
 		fakeSig[i] = byte(i)
 	}
-	sigB64 := base64.RawURLEncoding.EncodeToString(fakeSig)
+	sigB64 := base64.StdEncoding.EncodeToString(fakeSig)
 
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
@@ -134,7 +134,7 @@ func TestVerifyInvalidSignature(t *testing.T) {
 func TestVerifyRejectsInvalidKeyFormat(t *testing.T) {
 	resetVerifyFlags()
 
-	sigB64 := base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
+	sigB64 := base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 
 	stdin := bytes.NewReader([]byte("some data"))
 	stdout := new(bytes.Buffer)
@@ -188,7 +188,7 @@ func TestVerifyRejectsOversizedInput(t *testing.T) {
 
 	message := []byte("small")
 	sig := ed25519.Sign(priv, message)
-	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
 
 	oversized := make([]byte, maxVerifyInputBytes+1)
 	for i := range oversized {
@@ -266,7 +266,7 @@ func TestVerifyWrongKey(t *testing.T) {
 
 	message := []byte("deploy v2.3.0\n")
 	sig := ed25519.Sign(priv, message)
-	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
 
 	stdin := bytes.NewReader(message)
 	stdout := new(bytes.Buffer)
@@ -295,7 +295,7 @@ func TestVerifyRejectsEmptyStdin(t *testing.T) {
 	setupVerifyMock(t, pub)
 
 	sig := ed25519.Sign(priv, []byte("data"))
-	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
 
 	stdin := bytes.NewReader([]byte{})
 	stdout := new(bytes.Buffer)
@@ -324,7 +324,7 @@ func TestVerifySignerNotFound(t *testing.T) {
 	apiBaseURL = server.URL
 	defer func() { apiBaseURL = oldBaseURL }()
 
-	sigB64 := base64.RawURLEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
+	sigB64 := base64.StdEncoding.EncodeToString(make([]byte, ed25519.SignatureSize))
 
 	stdin := bytes.NewReader([]byte("some data"))
 	stdout := new(bytes.Buffer)
@@ -351,7 +351,7 @@ func TestVerifyRejectsWrongLengthSignature(t *testing.T) {
 	setupVerifyMock(t, pub)
 
 	shortSig := make([]byte, 32)
-	sigB64 := base64.RawURLEncoding.EncodeToString(shortSig)
+	sigB64 := base64.StdEncoding.EncodeToString(shortSig)
 
 	stdin := bytes.NewReader([]byte("some data"))
 	stdout := new(bytes.Buffer)

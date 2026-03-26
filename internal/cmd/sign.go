@@ -20,7 +20,7 @@ var signCmd = &cobra.Command{
 	Long: `Sign stdin with the Ed25519 private key from the .rtbtr directory.
 
 Reads all of stdin as the content to sign (max 1MB) and outputs
-the 64-byte Ed25519 signature as URL-safe base64 (no padding) to stdout.`,
+the 64-byte Ed25519 signature as standard base64 (with padding) to stdout.`,
 	Args: cobra.NoArgs,
 	RunE: runSign,
 }
@@ -50,7 +50,7 @@ func runSign(cmd *cobra.Command, args []string) error {
 	privKey := ed25519.NewKeyFromSeed(seed)
 	sig := ed25519.Sign(privKey, content)
 
-	sigB64 := base64.RawURLEncoding.EncodeToString(sig)
+	sigB64 := base64.StdEncoding.EncodeToString(sig)
 	_, err = fmt.Fprintln(cmd.OutOrStdout(), sigB64)
 	return err
 }
