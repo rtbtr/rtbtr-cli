@@ -488,7 +488,9 @@ func TestProfileAcceptsMultiByteDescriptionAt500Runes(t *testing.T) {
 }
 
 // T-P10c: A multi-byte Unicode description at 501 characters (runes) must be
-// rejected even though each rune is > 1 byte. The limit is on characters, not bytes.
+// rejected with an error that reports the correct character count (501, not
+// the byte count 1002). This ensures the limit counts Unicode characters,
+// not bytes, and that the error message reflects the actual character count.
 func TestProfileRejectsMultiByteDescriptionAt501Runes(t *testing.T) {
 	resetProfileFlags()
 
@@ -496,6 +498,7 @@ func TestProfileRejectsMultiByteDescriptionAt501Runes(t *testing.T) {
 	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	// 501 runes of "é" (U+00E9) — each rune is 2 bytes, so total is 1002 bytes.
+	// A byte-counting implementation would see 1002 (wrong), not 501 (correct).
 	multiByteDesc := strings.Repeat("é", 501)
 
 	buf := new(bytes.Buffer)
@@ -506,6 +509,15 @@ func TestProfileRejectsMultiByteDescriptionAt501Runes(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("profile should reject 501-rune multi-byte description")
+	}
+
+	// The error message must reference the actual character count (501),
+	// proving the implementation counts runes, not bytes.
+	// A byte-counting implementation would either use a static message
+	// (missing "501") or report "1002" bytes instead.
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "501") {
+		t.Errorf("error = %q, want it to contain the character count '501' (not byte count '1002')", errMsg)
 	}
 }
 
