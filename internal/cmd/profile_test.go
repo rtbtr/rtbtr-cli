@@ -263,6 +263,65 @@ func TestProfileDescriptionOnlySendsPatch(t *testing.T) {
 	}
 }
 
+// T-P06b: --description "" (explicit empty) sends a PATCH body with the
+// "description" key present and set to "" so existing descriptions can be cleared.
+// This verifies that the JSON marshaling does NOT use omitempty on the description
+// field, which would silently drop the empty value.
+func TestProfileEmptyDescriptionClearsExisting(t *testing.T) {
+	resetProfileFlags()
+
+	server, capture := setupProfileServer(t, http.StatusOK,
+		`{"name":"testbot","description":"","org":"testorg"}`)
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--description", "", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("profile --description '' returned error: %v", err)
+	}
+
+	// Verify PATCH method.
+	if capture.Method != "PATCH" {
+		t.Errorf("request method = %q, want PATCH", capture.Method)
+	}
+
+	// The JSON body must contain the "description" key even when value is "".
+	// We use json.Decoder with UseNumber to do a raw decode.
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(capture.Body, &raw); err != nil {
+		t.Fatalf("parsing PATCH body: %v", err)
+	}
+
+	descRaw, hasDesc := raw["description"]
+	if !hasDesc {
+		t.Fatalf("PATCH body missing 'description' key; body = %s — cannot clear an existing description", string(capture.Body))
+	}
+
+	// The value should be the JSON string "" (serialized as `""`).
+	var descVal string
+	if err := json.Unmarshal(descRaw, &descVal); err != nil {
+		t.Fatalf("description value is not a JSON string: %v", err)
+	}
+	if descVal != "" {
+		t.Errorf("description = %q, want empty string", descVal)
+	}
+
+	// Verify name is absent (only description was set).
+	if _, hasName := raw["name"]; hasName {
+		t.Errorf("body should not contain 'name' when only --description is set, got: %s", string(capture.Body))
+	}
+}
+
 // T-P07: --name only without --force prints warning and aborts.
 func TestProfileNameWithoutForceAborts(t *testing.T) {
 	resetProfileFlags()
@@ -378,7 +437,7 @@ func TestProfileBothFlagsSendsPatch(t *testing.T) {
 	}
 }
 
-// T-P10: Description exceeding 500 characters is rejected.
+// T-P10: Description exceeding 500 characters (runes) is rejected.
 func TestProfileRejectsDescriptionTooLong(t *testing.T) {
 	resetProfileFlags()
 
@@ -395,6 +454,58 @@ func TestProfileRejectsDescriptionTooLong(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("profile should reject description longer than 500 characters")
+	}
+}
+
+// T-P10b: A multi-byte Unicode description at exactly 500 characters (runes) must
+// be accepted. This verifies the limit counts Unicode characters, not bytes.
+// 500 × "é" (2 bytes each) = 1000 bytes but only 500 characters.
+func TestProfileAcceptsMultiByteDescriptionAt500Runes(t *testing.T) {
+	resetProfileFlags()
+
+	server, _ := setupProfileServer(t, http.StatusOK,
+		`{"name":"testbot","description":"ok","org":"testorg"}`)
+	defer server.Close()
+
+	oldBaseURL := apiBaseURL
+	apiBaseURL = server.URL
+	defer func() { apiBaseURL = oldBaseURL }()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
+
+	// 500 runes of "é" (U+00E9) — each rune is 2 bytes, so total is 1000 bytes.
+	multiByteDesc := strings.Repeat("é", 500)
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--description", multiByteDesc, "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("profile should accept 500-rune multi-byte description (1000 bytes), got error: %v", err)
+	}
+}
+
+// T-P10c: A multi-byte Unicode description at 501 characters (runes) must be
+// rejected even though each rune is > 1 byte. The limit is on characters, not bytes.
+func TestProfileRejectsMultiByteDescriptionAt501Runes(t *testing.T) {
+	resetProfileFlags()
+
+	dir := t.TempDir()
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
+
+	// 501 runes of "é" (U+00E9) — each rune is 2 bytes, so total is 1002 bytes.
+	multiByteDesc := strings.Repeat("é", 501)
+
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--description", multiByteDesc, "--home", homePath})
+
+	err := rootCmd.Execute()
+	if err == nil {
+		t.Fatal("profile should reject 501-rune multi-byte description")
 	}
 }
 
@@ -570,8 +681,9 @@ func TestProfileSigningUsesCorrectKeyID(t *testing.T) {
 	}
 }
 
-// T-P13: Signing does NOT include Content-Digest (nil body passed to Sign).
-func TestProfileSigningOmitsContentDigest(t *testing.T) {
+// T-P13: PATCH body is covered by Content-Digest in the signature, consistent
+// with other body-bearing commands (send, reply) that pass bodyBytes to Sign().
+func TestProfileSigningIncludesContentDigest(t *testing.T) {
 	resetProfileFlags()
 
 	server, capture := setupProfileServer(t, http.StatusOK,
@@ -594,14 +706,17 @@ func TestProfileSigningOmitsContentDigest(t *testing.T) {
 		t.Fatalf("profile returned error: %v", err)
 	}
 
-	// The Content-Digest header should be empty because nil body is passed to Sign().
-	if capture.ContentDigest != "" {
-		t.Errorf("Content-Digest = %q, want empty (signing should not include content-digest)", capture.ContentDigest)
+	// Content-Digest header must be present because the PATCH has a JSON body.
+	if capture.ContentDigest == "" {
+		t.Error("Content-Digest header is empty; body-bearing requests must include Content-Digest")
+	}
+	if !strings.HasPrefix(capture.ContentDigest, "sha-256=:") {
+		t.Errorf("Content-Digest = %q, want it to start with 'sha-256=:'", capture.ContentDigest)
 	}
 
-	// Also verify content-digest is not in Signature-Input covered components.
-	if strings.Contains(capture.SignatureInput, "content-digest") {
-		t.Errorf("Signature-Input = %q, should not contain 'content-digest'", capture.SignatureInput)
+	// Verify content-digest IS in Signature-Input covered components.
+	if !strings.Contains(capture.SignatureInput, "content-digest") {
+		t.Errorf("Signature-Input = %q, must contain 'content-digest' for body-bearing requests", capture.SignatureInput)
 	}
 }
 
