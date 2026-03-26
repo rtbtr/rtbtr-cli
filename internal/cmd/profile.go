@@ -75,13 +75,18 @@ func runProfile(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	var resp profileResponse
+	if err := json.Unmarshal(responseBody, &resp); err != nil {
+		return fmt.Errorf("parsing response body: %w", err)
+	}
+
 	if nameChanged {
-		if err := persistRenamedBot(cfg.Org); err != nil {
-			return err
+		if err := persistRenamedBot(cfg.Org, resp.Name); err != nil {
+			return fmt.Errorf("rename succeeded on server but failed to update local config: %w", err)
 		}
 	}
 
-	return printProfileResult(cmd.OutOrStdout(), responseBody)
+	return printParsedProfile(cmd.OutOrStdout(), &resp)
 }
 
 func validateProfileFlags(nameChanged, descChanged bool) error {
@@ -132,12 +137,12 @@ func sendProfilePatch(cmd *cobra.Command, cfg *config.Config, seed, bodyBytes []
 	return doRequest(req, checkProfileStatus)
 }
 
-func persistRenamedBot(org string) error {
+func persistRenamedBot(org, newName string) error {
 	homeDir, err := home.Resolve(homeFlag, false)
 	if err != nil {
 		return fmt.Errorf("resolving home directory: %w", err)
 	}
-	if err := config.Write(homeDir, &config.Config{Org: org, Bot: profileNameFlag}); err != nil {
+	if err := config.Write(homeDir, &config.Config{Org: org, Bot: newName}); err != nil {
 		return fmt.Errorf("writing config: %w", err)
 	}
 	return nil
@@ -160,18 +165,12 @@ var checkProfileStatus = newStatusChecker("profile", map[int]string{
 	http.StatusUnprocessableEntity: "validation error: %s",
 })
 
-func printProfileResult(w io.Writer, data []byte) error {
-	var resp profileResponse
-	if err := json.Unmarshal(data, &resp); err != nil {
-		return fmt.Errorf("parsing response: %w", err)
-	}
-
+func printParsedProfile(w io.Writer, resp *profileResponse) error {
 	fmt.Fprintf(w, "name: %s\n", resp.Name)
 	fmt.Fprintf(w, "org: %s\n", resp.Org)
 	if resp.Description != "" {
 		fmt.Fprintf(w, "description: %s\n", resp.Description)
 	}
-
 	return nil
 }
 
