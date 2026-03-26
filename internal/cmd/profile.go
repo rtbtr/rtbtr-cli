@@ -145,7 +145,7 @@ func persistRenamedBot(org string) error {
 
 func validateName(name string) error {
 	if len(name) < 2 {
-		return fmt.Errorf("name must be at least 2 characters")
+		return errors.New("name must be at least 2 characters")
 	}
 	if !namePattern.MatchString(name) {
 		return fmt.Errorf("name must match pattern %s (lowercase alphanumeric and hyphens, cannot start or end with hyphen)", namePattern.String())
