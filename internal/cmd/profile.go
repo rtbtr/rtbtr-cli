@@ -12,6 +12,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/rtbtr/rtbtr-cli/internal/config"
+	"github.com/rtbtr/rtbtr-cli/internal/home"
 	"github.com/rtbtr/rtbtr-cli/internal/signing"
 )
 
@@ -52,10 +54,40 @@ func runProfile(cmd *cobra.Command, args []string) error {
 	nameChanged := cmd.Flags().Lookup("name").Changed
 	descChanged := cmd.Flags().Lookup("description").Changed
 
+	if err := validateProfileFlags(nameChanged, descChanged); err != nil {
+		return err
+	}
+
+	cfg, seed, err := loadMailboxIdentity()
+	if err != nil {
+		return err
+	}
+
+	body := buildProfileBody(nameChanged, descChanged)
+
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("marshaling request body: %w", err)
+	}
+
+	responseBody, err := sendProfilePatch(cmd, cfg, seed, bodyBytes)
+	if err != nil {
+		return err
+	}
+
+	if nameChanged {
+		if err := persistRenamedBot(cfg.Org); err != nil {
+			return err
+		}
+	}
+
+	return printProfileResult(cmd.OutOrStdout(), responseBody)
+}
+
+func validateProfileFlags(nameChanged, descChanged bool) error {
 	if !nameChanged && !descChanged {
 		return errors.New("at least one of --name or --description is required")
 	}
-
 	if nameChanged {
 		if err := validateName(profileNameFlag); err != nil {
 			return err
@@ -64,19 +96,16 @@ func runProfile(cmd *cobra.Command, args []string) error {
 			return errors.New("changing bot name is irreversible; use --force to confirm")
 		}
 	}
-
 	if descChanged {
 		runeCount := utf8.RuneCountInString(profileDescriptionFlag)
 		if runeCount > 500 {
 			return fmt.Errorf("description must be 500 characters or fewer (got %d)", runeCount)
 		}
 	}
+	return nil
+}
 
-	cfg, seed, err := loadMailboxIdentity()
-	if err != nil {
-		return err
-	}
-
+func buildProfileBody(nameChanged, descChanged bool) profileRequest {
 	body := profileRequest{}
 	if nameChanged {
 		body.Name = &profileNameFlag
@@ -84,30 +113,34 @@ func runProfile(cmd *cobra.Command, args []string) error {
 	if descChanged {
 		body.Description = &profileDescriptionFlag
 	}
+	return body
+}
 
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		return fmt.Errorf("marshaling request body: %w", err)
-	}
-
+func sendProfilePatch(cmd *cobra.Command, cfg *config.Config, seed, bodyBytes []byte) ([]byte, error) {
 	requestURL := fmt.Sprintf("%s/orgs/%s/bots/%s", apiBaseURL, cfg.Org, cfg.Bot)
 	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPatch, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return fmt.Errorf("creating request: %w", err)
+		return nil, fmt.Errorf("creating request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	keyID := fmt.Sprintf("%s/o/%s/%s", platformBaseURL, cfg.Org, cfg.Bot)
 	if signErr := signing.Sign(req, seed, keyID, bodyBytes); signErr != nil {
-		return fmt.Errorf("signing request: %w", signErr)
+		return nil, fmt.Errorf("signing request: %w", signErr)
 	}
 
-	responseBody, err := doRequest(req, checkProfileStatus)
+	return doRequest(req, checkProfileStatus)
+}
+
+func persistRenamedBot(org string) error {
+	homeDir, err := home.Resolve(homeFlag, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("resolving home directory: %w", err)
 	}
-
-	return printProfileResult(cmd.OutOrStdout(), responseBody)
+	if err := config.Write(homeDir, &config.Config{Org: org, Bot: profileNameFlag}); err != nil {
+		return fmt.Errorf("writing config: %w", err)
+	}
+	return nil
 }
 
 func validateName(name string) error {
