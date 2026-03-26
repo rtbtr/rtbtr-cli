@@ -78,4 +78,5 @@ func init() {
 	rootCmd.AddCommand(encryptCmd)
 	rootCmd.AddCommand(decryptCmd)
 	rootCmd.AddCommand(upgradeCmd)
+	rootCmd.AddCommand(profileCmd)
 }
