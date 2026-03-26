@@ -1044,11 +1044,27 @@ func TestProfileRenamePreservesOrg(t *testing.T) {
 
 // T-P21c: A description-only update (no --name) must NOT change the bot name
 // in config.yaml — only rename operations should trigger config rewrite.
+// This test first performs a successful rename to establish a config-writing
+// baseline, then verifies a subsequent description-only update leaves the
+// renamed bot name intact. Without this two-phase approach the test would
+// pass vacuously when the implementation never writes config at all.
 func TestProfileDescriptionOnlyDoesNotChangeBotName(t *testing.T) {
 	resetProfileFlags()
 
-	server, _ := setupProfileServer(t, http.StatusOK,
-		`{"name":"testbot","description":"new desc","org":"testorg"}`)
+	// Server returns 200 for both requests (rename then description update).
+	reqCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if reqCount == 1 {
+			// Rename response.
+			w.Write([]byte(`{"name":"renamed-bot","description":"","org":"testorg"}`))
+		} else {
+			// Description-only response.
+			w.Write([]byte(`{"name":"renamed-bot","description":"new desc","org":"testorg"}`))
+		}
+	}))
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -1058,7 +1074,20 @@ func TestProfileDescriptionOnlyDoesNotChangeBotName(t *testing.T) {
 	dir := t.TempDir()
 	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
+	// Phase 1: Successful rename from "testbot" to "renamed-bot".
+	// A correct implementation must persist "renamed-bot" to config.yaml.
 	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--name", "renamed-bot", "--force", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("profile --name --force (rename) returned error: %v", err)
+	}
+
+	// Phase 2: Description-only update — must NOT revert the renamed bot name.
+	resetProfileFlags()
+	buf.Reset()
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
 	rootCmd.SetArgs([]string{"profile", "--description", "new desc", "--home", homePath})
@@ -1067,25 +1096,44 @@ func TestProfileDescriptionOnlyDoesNotChangeBotName(t *testing.T) {
 		t.Fatalf("profile --description returned error: %v", err)
 	}
 
+	// Config must reflect the rename from phase 1 ("renamed-bot"), not the
+	// original setup value ("testbot"). If the implementation never writes
+	// config at all, cfg.Bot will still be "testbot" and this assertion fails.
 	cfg, err := config.Load(homePath)
 	if err != nil {
 		t.Fatalf("loading config after description update: %v", err)
 	}
-	if cfg.Bot != "testbot" {
-		t.Errorf("config.Bot = %q after description-only update, want %q — bot name should not change", cfg.Bot, "testbot")
+	if cfg.Bot != "renamed-bot" {
+		t.Errorf("config.Bot = %q after rename + description-only update, want %q — rename must persist to config and description-only update must not revert it", cfg.Bot, "renamed-bot")
 	}
 	if cfg.Org != "testorg" {
-		t.Errorf("config.Org = %q after description-only update, want %q", cfg.Org, "testorg")
+		t.Errorf("config.Org = %q after description-only update, want %q — org must not change", cfg.Org, "testorg")
 	}
 }
 
 // T-P21d: When rename fails (server returns non-2xx), local config.yaml must NOT
 // be modified — partial rename must not corrupt local state.
+// This test first performs a successful rename to establish a config-writing
+// baseline, then verifies a subsequent failed rename (409) does not corrupt
+// the persisted bot name. Without the two-phase approach the test would pass
+// vacuously when the implementation never writes config at all.
 func TestProfileRenameFailureDoesNotUpdateConfig(t *testing.T) {
 	resetProfileFlags()
 
-	// Server returns 409 Conflict — name is taken.
-	server, _ := setupProfileServer(t, http.StatusConflict, `{"error":"name taken"}`)
+	// Server with counter: first request returns 200 (successful rename),
+	// second request returns 409 Conflict (name taken).
+	reqCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reqCount++
+		w.Header().Set("Content-Type", "application/json")
+		if reqCount == 1 {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"name":"intermediate-bot","description":"","org":"testorg"}`))
+		} else {
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(`{"error":"name taken"}`))
+		}
+	}))
 	defer server.Close()
 
 	oldBaseURL := apiBaseURL
@@ -1095,7 +1143,21 @@ func TestProfileRenameFailureDoesNotUpdateConfig(t *testing.T) {
 	dir := t.TempDir()
 	homePath := setupInboxIdentity(t, dir, "testorg", "original-bot")
 
+	// Phase 1: Successful rename from "original-bot" to "intermediate-bot".
+	// A correct implementation must persist "intermediate-bot" to config.yaml.
 	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs([]string{"profile", "--name", "intermediate-bot", "--force", "--home", homePath})
+
+	if err := rootCmd.Execute(); err != nil {
+		t.Fatalf("profile --name --force (first rename) returned error: %v", err)
+	}
+
+	// Phase 2: Failed rename from "intermediate-bot" to "taken-name" (409).
+	// Config must NOT be updated — it should still say "intermediate-bot".
+	resetProfileFlags()
+	buf.Reset()
 	rootCmd.SetOut(buf)
 	rootCmd.SetErr(buf)
 	rootCmd.SetArgs([]string{"profile", "--name", "taken-name", "--force", "--home", homePath})
@@ -1105,12 +1167,18 @@ func TestProfileRenameFailureDoesNotUpdateConfig(t *testing.T) {
 		t.Fatal("profile --name --force with 409 should return error")
 	}
 
-	// Config must still have the original bot name.
+	// Config must still have the name from the successful rename ("intermediate-bot"),
+	// not the original setup name ("original-bot") and not the failed target ("taken-name").
+	// If the implementation never writes config at all, cfg.Bot will still be
+	// "original-bot" and this assertion fails.
 	cfg, loadErr := config.Load(homePath)
 	if loadErr != nil {
 		t.Fatalf("loading config after failed rename: %v", loadErr)
 	}
-	if cfg.Bot != "original-bot" {
-		t.Errorf("config.Bot = %q after failed rename, want %q — failed rename must not change local config", cfg.Bot, "original-bot")
+	if cfg.Bot != "intermediate-bot" {
+		t.Errorf("config.Bot = %q after successful rename + failed rename, want %q — successful rename must persist and failed rename must not corrupt it", cfg.Bot, "intermediate-bot")
+	}
+	if cfg.Org != "testorg" {
+		t.Errorf("config.Org = %q after failed rename, want %q — org must not change", cfg.Org, "testorg")
 	}
 }
