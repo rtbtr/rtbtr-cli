@@ -201,25 +201,25 @@
 
 ## claim
 
-- [untested] CL-01: `claim` is registered as a root subcommand with `Args: cobra.NoArgs`.
-- [untested] CL-02: `claim` resolves the `.rtbtr` directory with `allowCreate=false`; rejects with error mentioning `.rtbtr` if not found.
-- [untested] CL-03: `claim` loads `config.yaml` and rejects with `"not registered: run rtbtr register first"` if org or bot is empty or config is missing.
-- [untested] CL-04: `claim` loads the private key via `home.LoadPrivateKey`; rejects with `"private key not found"` if missing.
-- [untested] CL-05: `--file <path>` reads the file streaming through SHA-256 (constant memory via `io.Copy`), encodes as URL-safe base64 (no padding, 43 chars). Empty files allowed.
-- [untested] CL-06: `--stdin` reads stdin streaming through SHA-256. Rejects empty stdin (0 bytes).
-- [untested] CL-07: `--hash <value>` validates before sending: exactly 43 chars, URL-safe base64 alphabet, decodes to exactly 32 bytes.
-- [untested] CL-08: Exactly one of `--file`, `--stdin`, or `--hash` must be provided.
-- [untested] CL-09: POSTs to `{apiBaseURL}/orgs/{org}/bots/{bot}/claims` with `Content-Type: application/json` and body `{"hash": "<43-char URL-safe base64>"}` where org/bot come from local config.
-- [untested] CL-10: POST includes `Content-Digest` and HTTP signature headers with `keyid="{platformBaseURL}/o/{org}/{bot}"` and `alg="ed25519"`.
-- [untested] CL-11: Default output prints `"claimed <claim_id>"` on line 1 and `"hash: <hash>"` on line 2.
-- [untested] CL-12: `--json` outputs the raw API response body to stdout.
-- [untested] CL-13: HTTP error mapping: 401, 404, 422, other non-2xx.
+- [tested] CL-01: `claim` is registered as a root subcommand with `Args: cobra.NoArgs`.
+- [tested] CL-02: `claim` resolves the `.rtbtr` directory with `allowCreate=false`; rejects with error mentioning `.rtbtr` if not found.
+- [tested] CL-03: `claim` loads `config.yaml` and rejects with `"not registered: run rtbtr register first"` if org or bot is empty or config is missing.
+- [tested] CL-04: `claim` loads the private key via `home.LoadPrivateKey`; rejects with `"private key not found"` if missing.
+- [tested] CL-05: `--file <path>` reads the file streaming through SHA-256 (constant memory via `io.Copy`), encodes as URL-safe base64 (no padding, 43 chars). Empty files allowed.
+- [tested] CL-06: `--stdin` reads stdin streaming through SHA-256. Rejects empty stdin (0 bytes).
+- [tested] CL-07: `--hash <value>` validates before sending: exactly 43 chars, URL-safe base64 alphabet, decodes to exactly 32 bytes.
+- [tested] CL-08: Exactly one of `--file`, `--stdin`, or `--hash` must be provided.
+- [tested] CL-09: POSTs to `{apiBaseURL}/orgs/{org}/bots/{bot}/claims` with `Content-Type: application/json` and body `{"hash": "<43-char URL-safe base64>"}` where org/bot come from local config.
+- [tested] CL-10: POST includes `Content-Digest` and HTTP signature headers with `keyid="{platformBaseURL}/o/{org}/{bot}"` and `alg="ed25519"`.
+- [tested] CL-11: Default output prints `"claimed <claim_id>"` on line 1 and `"hash: <hash>"` on line 2.
+- [tested] CL-12: `--json` outputs the raw API response body to stdout.
+- [tested] CL-13: HTTP error mapping: 401, 404, 422, other non-2xx.
 
 ## claims
 
-- [untested] CLS-01: `claims` is registered as a root subcommand.
-- [untested] CLS-02: `claims` requires exactly one positional argument in `org/bot` format.
-- [untested] CLS-03: `claims` sends an unauthenticated GET. No `.rtbtr` directory or local identity required.
-- [untested] CLS-04: `--page`, `--limit`, and `--order` always included as query parameters. No client-side validation.
-- [untested] CLS-05: Table output via `text/tabwriter` with `ID HASH CREATED` header. Empty result prints `"no claims"`. `--json` outputs raw response.
-- [untested] CLS-06: HTTP error mapping: 404, 422, other non-2xx.
+- [tested] CLS-01: `claims` is registered as a root subcommand.
+- [tested] CLS-02: `claims` requires exactly one positional argument in `org/bot` format.
+- [tested] CLS-03: `claims` sends an unauthenticated GET. No `.rtbtr` directory or local identity required.
+- [tested] CLS-04: `--page`, `--limit`, and `--order` always included as query parameters. No client-side validation.
+- [tested] CLS-05: Table output via `text/tabwriter` with `ID HASH CREATED` header. Empty result prints `"no claims"`. `--json` outputs raw response.
+- [tested] CLS-06: HTTP error mapping: 404, 422, other non-2xx.
