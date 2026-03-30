@@ -47,23 +47,6 @@ func resetClaimFlags() {
 	}
 }
 
-// setupClaimIdentity creates a .rtbtr home with config and keypair.
-func setupClaimIdentity(t *testing.T, parent, org, bot string) string {
-	t.Helper()
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatalf("generating key: %v", err)
-	}
-	seed := priv.Seed()
-	encodedSeed := base64.RawURLEncoding.EncodeToString(seed)
-
-	homePath := setupRtbtrDir(t, parent, map[string]string{
-		"config.yaml": "org: " + org + "\nbot: " + bot + "\n",
-		"private_key": encodedSeed,
-	})
-	return homePath
-}
-
 // claimCapture holds captured HTTP request fields from a claim mock server.
 type claimCapture struct {
 	Method         string
@@ -303,7 +286,7 @@ func TestClaimFileHashesCorrectly(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	filePath := filepath.Join(dir, "testfile.bin")
 	if err := os.WriteFile(filePath, content, 0o644); err != nil {
@@ -348,7 +331,7 @@ func TestClaimFileAcceptsEmptyFile(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	filePath := filepath.Join(dir, "empty.bin")
 	if err := os.WriteFile(filePath, nil, 0o644); err != nil {
@@ -379,7 +362,7 @@ func TestClaimFileRejectsUnreadablePath(t *testing.T) {
 	resetClaimFlags()
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -413,7 +396,7 @@ func TestClaimStdinHashesCorrectly(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -451,7 +434,7 @@ func TestClaimStdinRejectsEmpty(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -489,7 +472,7 @@ func TestClaimHashAcceptsValid(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -540,7 +523,7 @@ func TestClaimHashRejectsInvalid(t *testing.T) {
 			t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 			dir := t.TempDir()
-			homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+			homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 			buf := new(bytes.Buffer)
 			rootCmd.SetOut(buf)
@@ -594,7 +577,7 @@ func TestClaimSourceFlagExclusivity(t *testing.T) {
 			t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 			dir := t.TempDir()
-			homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+			homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 			args := make([]string, 0, len(tc.args)+2)
 			args = append(args, tc.args...)
@@ -634,7 +617,7 @@ func TestClaimPostsToCorrectEndpoint(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "myorg", "mybot")
+	homePath := setupInboxIdentity(t, dir, "myorg", "mybot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -676,7 +659,7 @@ func TestClaimPostHeaders(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "sigorg", "sigbot")
+	homePath := setupInboxIdentity(t, dir, "sigorg", "sigbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -740,7 +723,7 @@ func TestClaimDefaultOutput(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -777,7 +760,7 @@ func TestClaimJsonOutput(t *testing.T) {
 	t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 	dir := t.TempDir()
-	homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+	homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 	buf := new(bytes.Buffer)
 	rootCmd.SetOut(buf)
@@ -824,7 +807,7 @@ func TestClaimHttpErrorMapping(t *testing.T) {
 			t.Cleanup(func() { apiBaseURL = oldBaseURL })
 
 			dir := t.TempDir()
-			homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
+			homePath := setupInboxIdentity(t, dir, "testorg", "testbot")
 
 			buf := new(bytes.Buffer)
 			rootCmd.SetOut(buf)
