@@ -130,7 +130,7 @@ func printClaimsTable(w io.Writer, data []byte) error {
 
 func init() {
 	claimsCmd.Flags().IntVar(&claimsPageFlag, "page", 1, "page number")
-	claimsCmd.Flags().IntVar(&claimsLimitFlag, "limit", 20, "number of claims per page")
+	claimsCmd.Flags().IntVar(&claimsLimitFlag, "limit", 50, "number of claims per page")
 	claimsCmd.Flags().StringVar(&claimsOrderFlag, "order", "desc", "sort order (asc or desc)")
 	claimsCmd.Flags().BoolVar(&claimsJSONFlag, "json", false, "print raw JSON response")
 }

@@ -447,10 +447,8 @@ func TestClaimStdinRejectsEmpty(t *testing.T) {
 		t.Fatal("claim --stdin should reject empty stdin")
 	}
 	assertNotUnknownCommand(t, err)
-	// The error must specifically mention empty stdin, not be an unknown command error.
-	errStr := err.Error()
-	if !strings.Contains(errStr, "empty") && !strings.Contains(errStr, "stdin") {
-		t.Errorf("error = %q, want it to mention empty stdin", errStr)
+	if err.Error() != "empty input: stdin must contain data to hash" {
+		t.Errorf("error = %q, want exact %q", err.Error(), "empty input: stdin must contain data to hash")
 	}
 	if requestMade {
 		t.Error("claim made an HTTP request despite empty stdin")
@@ -500,11 +498,11 @@ func TestClaimHashRejectsInvalid(t *testing.T) {
 		name        string
 		errContains string
 	}{
-		{"AAAAAAAAAAAAAAAAAAAAAA", "too short", "hash"},
-		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "too long", "hash"},
-		{base64.StdEncoding.EncodeToString(make([]byte, 32)), "standard base64 padding", "hash"},
-		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!", "non-base64 chars", "hash"},
-		{base64.RawURLEncoding.EncodeToString(make([]byte, 16)), "too short (16-byte input encodes to 22 chars)", "hash"},
+		{"AAAAAAAAAAAAAAAAAAAAAA", "too short", "invalid hash: must be exactly 43 URL-safe base64 characters encoding 32 bytes"},
+		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "too long", "invalid hash: must be exactly 43 URL-safe base64 characters encoding 32 bytes"},
+		{base64.StdEncoding.EncodeToString(make([]byte, 32)), "standard base64 padding", "invalid hash: must be exactly 43 URL-safe base64 characters encoding 32 bytes"},
+		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!", "non-base64 chars", "invalid hash: must be exactly 43 URL-safe base64 characters encoding 32 bytes"},
+		{base64.RawURLEncoding.EncodeToString(make([]byte, 16)), "too short (16-byte input encodes to 22 chars)", "invalid hash: must be exactly 43 URL-safe base64 characters encoding 32 bytes"},
 	}
 
 	for _, tc := range cases {
@@ -787,10 +785,10 @@ func TestClaimHttpErrorMapping(t *testing.T) {
 	}{
 		// 401 must produce the shared authenticated-endpoint message.
 		{`{"error":"unauthorized"}`, "authentication failed: signature rejected", "", http.StatusUnauthorized},
-		// 404 maps to a specific "not found" (not the generic "claim failed:" prefix).
-		{`{"error":"not found"}`, "not found", "claim failed", http.StatusNotFound},
-		// 422 maps to "invalid hash:" with the body interpolated (not generic "claim failed:").
-		{`bad hash value`, "invalid hash: bad hash value", "claim failed", http.StatusUnprocessableEntity},
+		// 404 maps to "bot not found" (not the generic "claim failed:" prefix).
+		{`{"error":"not found"}`, "bot not found", "claim failed", http.StatusNotFound},
+		// 422 maps to "invalid claim:" with the body interpolated (not generic "claim failed:").
+		{`bad hash value`, "invalid claim: bad hash value", "claim failed", http.StatusUnprocessableEntity},
 		// Generic non-2xx falls back to "claim failed:" prefix.
 		{`internal error`, "claim failed:", "authentication failed", http.StatusInternalServerError},
 	}

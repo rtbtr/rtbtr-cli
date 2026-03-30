@@ -106,10 +106,10 @@ func resolveClaimHash(cmd *cobra.Command) (string, error) {
 	}
 
 	if sourceCount == 0 {
-		return "", errors.New("provide a hash source: --file, --stdin, or --hash")
+		return "", errors.New("one of --file, --stdin, or --hash is required")
 	}
 	if sourceCount > 1 {
-		return "", errors.New("only one of --file, --stdin, or --hash may be provided")
+		return "", errors.New("only one of --file, --stdin, or --hash may be used")
 	}
 
 	if claimFileFlag != "" {
@@ -130,7 +130,7 @@ func hashFile(path string) (string, error) {
 
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
-		return "", fmt.Errorf("reading file: %w", err)
+		return "", fmt.Errorf("hashing file: %w", err)
 	}
 
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil)), nil
@@ -143,32 +143,34 @@ func hashStdin(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("reading stdin: %w", err)
 	}
 	if n == 0 {
-		return "", errors.New("empty stdin: nothing to hash")
+		return "", errors.New("empty input: stdin must contain data to hash")
 	}
 
 	return base64.RawURLEncoding.EncodeToString(h.Sum(nil)), nil
 }
 
 func validateHash(value string) (string, error) {
+	const errMsg = "invalid hash: must be exactly 43 URL-safe base64 characters encoding 32 bytes"
+
 	if len(value) != 43 {
-		return "", fmt.Errorf("invalid hash: expected 43 characters, got %d", len(value))
+		return "", errors.New(errMsg)
 	}
 
 	decoded, err := base64.RawURLEncoding.DecodeString(value)
 	if err != nil {
-		return "", fmt.Errorf("invalid hash: not valid URL-safe base64: %w", err)
+		return "", errors.New(errMsg)
 	}
 
 	if len(decoded) != 32 {
-		return "", fmt.Errorf("invalid hash: decoded to %d bytes, expected 32", len(decoded))
+		return "", errors.New(errMsg)
 	}
 
 	return value, nil
 }
 
 var checkClaimStatus = newStatusChecker("claim", map[int]string{
-	http.StatusNotFound:            "not found",
-	http.StatusUnprocessableEntity: "invalid hash: %s",
+	http.StatusNotFound:            "bot not found",
+	http.StatusUnprocessableEntity: "invalid claim: %s",
 })
 
 func init() {
