@@ -82,9 +82,7 @@ linters:
           - dupl
           - errcheck
           - goconst
-          - gocritic
           - gosec
-          - govet
         path: _test\.go
       - linters:
           - lll

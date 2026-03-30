@@ -108,15 +108,15 @@ func TestClaimsCommandHelp(t *testing.T) {
 func TestClaimsArgumentValidation(t *testing.T) {
 	cases := []struct {
 		name        string
-		args        []string
 		errContains string
+		args        []string
 	}{
-		{"missing arg", []string{"claims"}, "org/bot"},
-		{"extra args", []string{"claims", "org/bot", "extra"}, "arg"},
-		{"no slash", []string{"claims", "orgbot"}, "org/bot"},
-		{"empty org", []string{"claims", "/bot"}, "org/bot"},
-		{"empty bot", []string{"claims", "org/"}, "org/bot"},
-		{"multiple slashes", []string{"claims", "a/b/c"}, "org/bot"},
+		{"missing arg", "org/bot", []string{"claims"}},
+		{"extra args", "arg", []string{"claims", "org/bot", "extra"}},
+		{"no slash", "org/bot", []string{"claims", "orgbot"}},
+		{"empty org", "org/bot", []string{"claims", "/bot"}},
+		{"empty bot", "org/bot", []string{"claims", "org/"}},
+		{"multiple slashes", "org/bot", []string{"claims", "a/b/c"}},
 	}
 
 	for _, tc := range cases {
@@ -331,13 +331,17 @@ func TestClaimsEmptyResult(t *testing.T) {
 // T-CLS-06: claims maps 404 and 422 specially and keeps generic non-2xx under "claims failed:".
 func TestClaimsHttpErrorMapping(t *testing.T) {
 	cases := []struct {
-		status      int
 		body        string
 		errContains string
+		errExcludes string
+		status      int
 	}{
-		{http.StatusNotFound, `{"error":"not found"}`, "not found"},
-		{http.StatusUnprocessableEntity, `invalid parameters`, "invalid"},
-		{http.StatusInternalServerError, `server error`, "claims failed"},
+		// 404 must produce "bot not found" (the special mapping, not "claims failed:").
+		{`{"error":"not found"}`, "bot not found", "claims failed", http.StatusNotFound},
+		// 422 must produce "invalid parameters:" with the body (not "claims failed:").
+		{`bad page value`, "invalid parameters: bad page value", "claims failed", http.StatusUnprocessableEntity},
+		// Generic non-2xx must use "claims failed:" prefix (not special-cased).
+		{`server error`, "claims failed:", "bot not found", http.StatusInternalServerError},
 	}
 
 	for _, tc := range cases {
@@ -361,6 +365,9 @@ func TestClaimsHttpErrorMapping(t *testing.T) {
 			assertClaimsNotUnknownCommand(t, err)
 			if !strings.Contains(err.Error(), tc.errContains) {
 				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.errContains)
+			}
+			if tc.errExcludes != "" && strings.Contains(err.Error(), tc.errExcludes) {
+				t.Errorf("error = %q, should not contain %q (wrong error mapping)", err.Error(), tc.errExcludes)
 			}
 		})
 	}

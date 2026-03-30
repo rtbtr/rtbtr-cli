@@ -144,13 +144,15 @@ func TestClaimRejectsExtraArgs(t *testing.T) {
 	if err == nil {
 		t.Fatal("claim should reject extra positional arguments")
 	}
-	// Must not be "unknown command" — that means claim isn't registered at all.
-	assertNotUnknownCommand(t, err)
-	// Cobra's NoArgs produces "unknown command" for extra args on the subcommand itself,
-	// so check that we at least get a rejection that references positional argument usage.
+	// cobra.NoArgs produces 'unknown command "unexpected-arg" for "claim"'.
+	// Distinguish from claim itself being unregistered ("unknown command \"claim\"").
 	errStr := err.Error()
-	if !strings.Contains(errStr, "unknown command") && !strings.Contains(errStr, "accepts") && !strings.Contains(errStr, "arg") {
-		t.Errorf("unexpected error: %v", err)
+	if strings.Contains(errStr, `unknown command "claim"`) && !strings.Contains(errStr, "for") {
+		t.Fatalf("claim command is not registered: %v", err)
+	}
+	// Verify this is cobra.NoArgs behavior (mentions the extra arg as unknown command for "claim").
+	if !strings.Contains(errStr, `unknown command "unexpected-arg" for`) {
+		t.Errorf("expected cobra.NoArgs rejection, got: %v", err)
 	}
 }
 
@@ -511,15 +513,15 @@ func TestClaimHashAcceptsValid(t *testing.T) {
 // T-CL-07: malformed --hash values are rejected before any HTTP call.
 func TestClaimHashRejectsInvalid(t *testing.T) {
 	cases := []struct {
-		name        string
 		value       string
+		name        string
 		errContains string
 	}{
-		{"too short", "AAAAAAAAAAAAAAAAAAAAAA", "hash"},
-		{"too long", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "hash"},
-		{"standard base64 padding", base64.StdEncoding.EncodeToString(make([]byte, 32)), "hash"},
-		{"non-base64 chars", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!", "hash"},
-		{"wrong decoded size (16 bytes)", base64.RawURLEncoding.EncodeToString(make([]byte, 16)), "hash"},
+		{"AAAAAAAAAAAAAAAAAAAAAA", "too short", "hash"},
+		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "too long", "hash"},
+		{base64.StdEncoding.EncodeToString(make([]byte, 32)), "standard base64 padding", "hash"},
+		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!", "non-base64 chars", "hash"},
+		{base64.RawURLEncoding.EncodeToString(make([]byte, 16)), "wrong decoded size (16 bytes)", "hash"},
 	}
 
 	for _, tc := range cases {
@@ -566,14 +568,14 @@ func TestClaimSourceFlagExclusivity(t *testing.T) {
 
 	cases := []struct {
 		name        string
-		args        []string
 		errContains string
+		args        []string
 	}{
-		{"no source flags", []string{"claim"}, "file"},
-		{"file and hash", []string{"claim", "--file", "/tmp/f", "--hash", validHash}, "one"},
-		{"file and stdin", []string{"claim", "--file", "/tmp/f", "--stdin"}, "one"},
-		{"stdin and hash", []string{"claim", "--stdin", "--hash", validHash}, "one"},
-		{"all three", []string{"claim", "--file", "/tmp/f", "--stdin", "--hash", validHash}, "one"},
+		{"no source flags", "file", []string{"claim"}},
+		{"file and hash", "one", []string{"claim", "--file", "/tmp/f", "--hash", validHash}},
+		{"file and stdin", "one", []string{"claim", "--file", "/tmp/f", "--stdin"}},
+		{"stdin and hash", "one", []string{"claim", "--stdin", "--hash", validHash}},
+		{"all three", "one", []string{"claim", "--file", "/tmp/f", "--stdin", "--hash", validHash}},
 	}
 
 	for _, tc := range cases {
@@ -594,7 +596,9 @@ func TestClaimSourceFlagExclusivity(t *testing.T) {
 			dir := t.TempDir()
 			homePath := setupClaimIdentity(t, dir, "testorg", "testbot")
 
-			args := append(tc.args, "--home", homePath)
+			args := make([]string, 0, len(tc.args)+2)
+			args = append(args, tc.args...)
+			args = append(args, "--home", homePath)
 
 			buf := new(bytes.Buffer)
 			rootCmd.SetOut(buf)
@@ -683,16 +687,24 @@ func TestClaimPostHeaders(t *testing.T) {
 		t.Fatalf("claim returned error: %v", err)
 	}
 
+	// Verify Content-Digest is present, well-formed, and matches the posted body.
 	if capture.ContentDigest == "" {
-		t.Error("Content-Digest header is empty")
+		t.Fatal("Content-Digest header is empty")
 	}
-	if !strings.HasPrefix(capture.ContentDigest, "sha-256=:") {
-		t.Errorf("Content-Digest = %q, want it to start with 'sha-256=:'", capture.ContentDigest)
+	if !strings.HasPrefix(capture.ContentDigest, "sha-256=:") || !strings.HasSuffix(capture.ContentDigest, ":") {
+		t.Errorf("Content-Digest = %q, want format 'sha-256=:<base64>:'", capture.ContentDigest)
 	}
-	if capture.SignatureInput == "" {
-		t.Error("Signature-Input header is empty")
+	// Verify the digest matches the actual posted body.
+	bodyDigest := sha256.Sum256(capture.Body)
+	expectedDigest := "sha-256=:" + base64.StdEncoding.EncodeToString(bodyDigest[:]) + ":"
+	if capture.ContentDigest != expectedDigest {
+		t.Errorf("Content-Digest = %q, want %q (computed from posted body)", capture.ContentDigest, expectedDigest)
 	}
 
+	// Verify Signature-Input contains required signed components.
+	if capture.SignatureInput == "" {
+		t.Fatal("Signature-Input header is empty")
+	}
 	expectedKeyID := fmt.Sprintf(`keyid="%s/o/sigorg/sigbot"`, platformBaseURL)
 	if !strings.Contains(capture.SignatureInput, expectedKeyID) {
 		t.Errorf("Signature-Input = %q, want it to contain %s", capture.SignatureInput, expectedKeyID)
@@ -700,8 +712,19 @@ func TestClaimPostHeaders(t *testing.T) {
 	if !strings.Contains(capture.SignatureInput, `alg="ed25519"`) {
 		t.Errorf("Signature-Input = %q, want it to contain alg=\"ed25519\"", capture.SignatureInput)
 	}
+	// Verify required covered components are present per RFC 9421.
+	for _, component := range []string{`"@method"`, `"@target-uri"`, `"content-digest"`} {
+		if !strings.Contains(capture.SignatureInput, component) {
+			t.Errorf("Signature-Input = %q, missing required component %s", capture.SignatureInput, component)
+		}
+	}
+
+	// Verify Signature header is present and well-formed.
 	if capture.Signature == "" {
-		t.Error("Signature header is empty")
+		t.Fatal("Signature header is empty")
+	}
+	if !strings.HasPrefix(capture.Signature, "sig1=:") || !strings.HasSuffix(capture.Signature, ":") {
+		t.Errorf("Signature = %q, want format 'sig1=:<base64>:'", capture.Signature)
 	}
 }
 
@@ -774,14 +797,19 @@ func TestClaimJsonOutput(t *testing.T) {
 // T-CL-13: claim maps 401, 404, 422, and generic non-2xx to documented errors.
 func TestClaimHttpErrorMapping(t *testing.T) {
 	cases := []struct {
-		status      int
 		body        string
 		errContains string
+		errExcludes string
+		status      int
 	}{
-		{http.StatusUnauthorized, `{"error":"unauthorized"}`, "authentication failed"},
-		{http.StatusNotFound, `{"error":"not found"}`, "not found"},
-		{http.StatusUnprocessableEntity, `invalid hash`, "invalid"},
-		{http.StatusInternalServerError, `internal error`, "claim failed"},
+		// 401 must produce the shared authenticated-endpoint message.
+		{`{"error":"unauthorized"}`, "authentication failed: signature rejected", "", http.StatusUnauthorized},
+		// 404 maps to a specific "not found" (not the generic "claim failed:" prefix).
+		{`{"error":"not found"}`, "not found", "claim failed", http.StatusNotFound},
+		// 422 maps to "invalid hash:" with the body interpolated (not generic "claim failed:").
+		{`bad hash value`, "invalid hash: bad hash value", "claim failed", http.StatusUnprocessableEntity},
+		// Generic non-2xx falls back to "claim failed:" prefix.
+		{`internal error`, "claim failed:", "authentication failed", http.StatusInternalServerError},
 	}
 
 	validHash := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
@@ -810,6 +838,9 @@ func TestClaimHttpErrorMapping(t *testing.T) {
 			assertNotUnknownCommand(t, err)
 			if !strings.Contains(err.Error(), tc.errContains) {
 				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.errContains)
+			}
+			if tc.errExcludes != "" && strings.Contains(err.Error(), tc.errExcludes) {
+				t.Errorf("error = %q, should not contain %q (wrong error mapping)", err.Error(), tc.errExcludes)
 			}
 		})
 	}

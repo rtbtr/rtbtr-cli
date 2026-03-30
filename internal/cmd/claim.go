@@ -33,12 +33,7 @@ Exactly one source must be specified.
 
 Authentication uses RFC 9421 HTTP Message Signatures with the Ed25519
 keypair from the .rtbtr directory.`,
-	Args: func(cmd *cobra.Command, args []string) error {
-		if len(args) > 0 {
-			return fmt.Errorf("accepts 0 args, received %d", len(args))
-		}
-		return nil
-	},
+	Args: cobra.NoArgs,
 	RunE: runClaim,
 }
 
