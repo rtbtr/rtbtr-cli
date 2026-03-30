@@ -198,3 +198,28 @@
 - [tested] P-19: HTTP 422 maps to "validation error: {response body}".
 - [tested] P-20: Non-2xx responses not otherwise mapped (e.g. 500) produce "profile failed: {status}: {body}".
 - [tested] P-21: After a successful `--name --force` rename, local config.yaml is updated with the server-confirmed new bot name (preserving org). After a failed rename (non-2xx), config.yaml is not modified. A description-only update does not change config.yaml.
+
+## claim
+
+- [tested] CL-01: `claim` is registered as a root subcommand with `Args: cobra.NoArgs`.
+- [tested] CL-02: `claim` resolves the `.rtbtr` directory with `allowCreate=false`; rejects with error mentioning `.rtbtr` if not found.
+- [tested] CL-03: `claim` loads `config.yaml` and rejects with `"not registered: run rtbtr register first"` if org or bot is empty or config is missing.
+- [tested] CL-04: `claim` loads the private key via `home.LoadPrivateKey`; rejects with `"private key not found"` if missing.
+- [tested] CL-05: `--file <path>` reads the file streaming through SHA-256 (constant memory via `io.Copy`), encodes as URL-safe base64 (no padding, 43 chars). Empty files allowed. Rejects unreadable paths with `"opening file: <os error>"`.
+- [tested] CL-06: `--stdin` reads stdin streaming through SHA-256. Rejects empty stdin (0 bytes) with `"empty input: stdin must contain data to hash"`.
+- [tested] CL-07: `--hash <value>` validates before sending: exactly 43 chars, URL-safe base64 alphabet, decodes to exactly 32 bytes. Rejects with `"invalid hash: must be exactly 43 URL-safe base64 characters encoding 32 bytes"`.
+- [tested] CL-08: Exactly one of `--file`, `--stdin`, or `--hash` must be provided. Zero → `"one of --file, --stdin, or --hash is required"`. Two or more → `"only one of --file, --stdin, or --hash may be used"`.
+- [tested] CL-09: POSTs to `{apiBaseURL}/orgs/{org}/bots/{bot}/claims` with `Content-Type: application/json` and body `{"hash": "<43-char URL-safe base64>"}` where org/bot come from local config.
+- [tested] CL-10: POST includes `Content-Digest` and HTTP signature headers with `keyid="{platformBaseURL}/o/{org}/{bot}"` and `alg="ed25519"`, signed components `"@method"`, `"@target-uri"`, `"@authority"`, `"content-digest"`.
+- [tested] CL-11: Default output prints `"claimed <claim_id>"` on line 1 and `"hash: <hash>"` on line 2.
+- [tested] CL-12: `--json` outputs the raw API response body to stdout.
+- [tested] CL-13: HTTP error mapping: 401 → `"authentication failed: signature rejected"`; 404 → `"bot not found"`; 422 → `"invalid claim: <response body>"`; other non-2xx → `"claim failed: <status>: <body>"`.
+
+## claims
+
+- [tested] CLS-01: `claims` is registered as a root subcommand.
+- [tested] CLS-02: `claims` requires exactly one positional argument in `org/bot` format.
+- [tested] CLS-03: `claims` sends an unauthenticated GET. No `.rtbtr` directory or local identity required.
+- [tested] CLS-04: `--page` (int, default 1), `--limit` (int, default 50), and `--order` (string, default `"desc"`) always included as query parameters. No client-side validation.
+- [tested] CLS-05: Table output via `text/tabwriter` with `ID HASH CREATED` header. Empty result prints `"no claims"`. `--json` outputs raw response.
+- [tested] CLS-06: HTTP error mapping: 404 → `"bot not found"`; 422 → `"invalid parameters: <response body>"`; other non-2xx → `"claims failed: <status>: <body>"`.
