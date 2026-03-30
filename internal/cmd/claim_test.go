@@ -212,8 +212,8 @@ func TestClaimRejectsMissingConfig(t *testing.T) {
 		t.Fatal("claim should return error when config.yaml is missing")
 	}
 	assertNotUnknownCommand(t, err)
-	if !strings.Contains(err.Error(), "not registered: run rtbtr register first") {
-		t.Errorf("error = %q, want 'not registered: run rtbtr register first'", err.Error())
+	if err.Error() != "not registered: run rtbtr register first" {
+		t.Errorf("error = %q, want exact %q", err.Error(), "not registered: run rtbtr register first")
 	}
 }
 
@@ -256,8 +256,8 @@ func TestClaimRejectsEmptyOrgBot(t *testing.T) {
 				t.Fatal("claim should return error for incomplete registration")
 			}
 			assertNotUnknownCommand(t, err)
-			if !strings.Contains(err.Error(), "not registered: run rtbtr register first") {
-				t.Errorf("error = %q, want 'not registered: run rtbtr register first'", err.Error())
+			if err.Error() != "not registered: run rtbtr register first" {
+				t.Errorf("error = %q, want exact %q", err.Error(), "not registered: run rtbtr register first")
 			}
 		})
 	}
@@ -713,7 +713,7 @@ func TestClaimPostHeaders(t *testing.T) {
 		t.Errorf("Signature-Input = %q, want it to contain alg=\"ed25519\"", capture.SignatureInput)
 	}
 	// Verify required covered components are present per RFC 9421.
-	for _, component := range []string{`"@method"`, `"@target-uri"`, `"content-digest"`} {
+	for _, component := range []string{`"@method"`, `"@target-uri"`, `"@authority"`, `"content-digest"`} {
 		if !strings.Contains(capture.SignatureInput, component) {
 			t.Errorf("Signature-Input = %q, missing required component %s", capture.SignatureInput, component)
 		}
