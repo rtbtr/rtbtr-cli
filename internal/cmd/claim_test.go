@@ -101,6 +101,15 @@ func setupClaimServer(t *testing.T, status int, response string) (*httptest.Serv
 	return server, capture
 }
 
+// assertNotUnknownCommand fails the test if the error is an "unknown command"
+// error, which means the claim subcommand is not registered.
+func assertNotUnknownCommand(t *testing.T, err error) {
+	t.Helper()
+	if err != nil && strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("claim command is not registered: %v", err)
+	}
+}
+
 // T-CL-01: claim is registered as a root subcommand and --help succeeds.
 func TestClaimCommandHelp(t *testing.T) {
 	resetClaimFlags()
@@ -135,6 +144,14 @@ func TestClaimRejectsExtraArgs(t *testing.T) {
 	if err == nil {
 		t.Fatal("claim should reject extra positional arguments")
 	}
+	// Must not be "unknown command" — that means claim isn't registered at all.
+	assertNotUnknownCommand(t, err)
+	// Cobra's NoArgs produces "unknown command" for extra args on the subcommand itself,
+	// so check that we at least get a rejection that references positional argument usage.
+	errStr := err.Error()
+	if !strings.Contains(errStr, "unknown command") && !strings.Contains(errStr, "accepts") && !strings.Contains(errStr, "arg") {
+		t.Errorf("unexpected error: %v", err)
+	}
 }
 
 // T-CL-02: claim without --home fails from a directory with no .rtbtr.
@@ -155,6 +172,7 @@ func TestClaimRejectsMissingRtbtrDir(t *testing.T) {
 	if err == nil {
 		t.Fatal("claim should return error when .rtbtr directory is missing")
 	}
+	assertNotUnknownCommand(t, err)
 	if !strings.Contains(err.Error(), ".rtbtr") {
 		t.Errorf("error = %q, want it to mention .rtbtr", err.Error())
 	}
@@ -191,6 +209,7 @@ func TestClaimRejectsMissingConfig(t *testing.T) {
 	if err == nil {
 		t.Fatal("claim should return error when config.yaml is missing")
 	}
+	assertNotUnknownCommand(t, err)
 	if !strings.Contains(err.Error(), "not registered: run rtbtr register first") {
 		t.Errorf("error = %q, want 'not registered: run rtbtr register first'", err.Error())
 	}
@@ -198,8 +217,6 @@ func TestClaimRejectsMissingConfig(t *testing.T) {
 
 // T-CL-03: empty org/bot in config produces the not-registered error.
 func TestClaimRejectsEmptyOrgBot(t *testing.T) {
-	resetClaimFlags()
-
 	cases := []struct {
 		name   string
 		config string
@@ -236,6 +253,7 @@ func TestClaimRejectsEmptyOrgBot(t *testing.T) {
 			if err == nil {
 				t.Fatal("claim should return error for incomplete registration")
 			}
+			assertNotUnknownCommand(t, err)
 			if !strings.Contains(err.Error(), "not registered: run rtbtr register first") {
 				t.Errorf("error = %q, want 'not registered: run rtbtr register first'", err.Error())
 			}
@@ -263,6 +281,7 @@ func TestClaimRejectsMissingPrivateKey(t *testing.T) {
 	if err == nil {
 		t.Fatal("claim should return error when private key is missing")
 	}
+	assertNotUnknownCommand(t, err)
 	if !strings.Contains(err.Error(), "private key not found") {
 		t.Errorf("error = %q, want it to contain 'private key not found'", err.Error())
 	}
@@ -353,7 +372,7 @@ func TestClaimFileAcceptsEmptyFile(t *testing.T) {
 	}
 }
 
-// T-CL-05: --file rejects unreadable path.
+// T-CL-05: --file rejects unreadable path with a file-related error.
 func TestClaimFileRejectsUnreadablePath(t *testing.T) {
 	resetClaimFlags()
 
@@ -368,6 +387,13 @@ func TestClaimFileRejectsUnreadablePath(t *testing.T) {
 	err := rootCmd.Execute()
 	if err == nil {
 		t.Fatal("claim should fail for unreadable file path")
+	}
+	assertNotUnknownCommand(t, err)
+	// The error must relate to file opening, not be a generic unknown command error.
+	errStr := err.Error()
+	if !strings.Contains(errStr, "no such file") && !strings.Contains(errStr, "not found") &&
+		!strings.Contains(errStr, "open") && !strings.Contains(errStr, "file") {
+		t.Errorf("error = %q, want file-related error", errStr)
 	}
 }
 
@@ -435,12 +461,18 @@ func TestClaimStdinRejectsEmpty(t *testing.T) {
 	if err == nil {
 		t.Fatal("claim --stdin should reject empty stdin")
 	}
+	assertNotUnknownCommand(t, err)
+	// The error must specifically mention empty stdin, not be an unknown command error.
+	errStr := err.Error()
+	if !strings.Contains(errStr, "empty") && !strings.Contains(errStr, "stdin") {
+		t.Errorf("error = %q, want it to mention empty stdin", errStr)
+	}
 	if requestMade {
 		t.Error("claim made an HTTP request despite empty stdin")
 	}
 }
 
-// T-CL-07: valid --hash value is forwarded unchanged; malformed values are rejected.
+// T-CL-07: valid --hash value is forwarded unchanged.
 func TestClaimHashAcceptsValid(t *testing.T) {
 	resetClaimFlags()
 
@@ -479,14 +511,15 @@ func TestClaimHashAcceptsValid(t *testing.T) {
 // T-CL-07: malformed --hash values are rejected before any HTTP call.
 func TestClaimHashRejectsInvalid(t *testing.T) {
 	cases := []struct {
-		name  string
-		value string
+		name        string
+		value       string
+		errContains string
 	}{
-		{"too short", "AAAAAAAAAAAAAAAAAAAAAA"},
-		{"too long", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"},
-		{"standard base64 padding", base64.StdEncoding.EncodeToString(make([]byte, 32))},
-		{"non-base64 chars", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!"},
-		{"wrong decoded size (16 bytes)", base64.RawURLEncoding.EncodeToString(make([]byte, 16))},
+		{"too short", "AAAAAAAAAAAAAAAAAAAAAA", "hash"},
+		{"too long", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "hash"},
+		{"standard base64 padding", base64.StdEncoding.EncodeToString(make([]byte, 32)), "hash"},
+		{"non-base64 chars", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!", "hash"},
+		{"wrong decoded size (16 bytes)", base64.RawURLEncoding.EncodeToString(make([]byte, 16)), "hash"},
 	}
 
 	for _, tc := range cases {
@@ -516,6 +549,10 @@ func TestClaimHashRejectsInvalid(t *testing.T) {
 			if err == nil {
 				t.Fatalf("claim --hash %q should be rejected", tc.value)
 			}
+			assertNotUnknownCommand(t, err)
+			if !strings.Contains(err.Error(), tc.errContains) {
+				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.errContains)
+			}
 			if requestMade {
 				t.Errorf("claim made an HTTP request for invalid hash %q", tc.value)
 			}
@@ -528,14 +565,15 @@ func TestClaimSourceFlagExclusivity(t *testing.T) {
 	validHash := base64.RawURLEncoding.EncodeToString(make([]byte, 32))
 
 	cases := []struct {
-		name string
-		args []string
+		name        string
+		args        []string
+		errContains string
 	}{
-		{"no source flags", []string{"claim"}},
-		{"file and hash", []string{"claim", "--file", "/tmp/f", "--hash", validHash}},
-		{"file and stdin", []string{"claim", "--file", "/tmp/f", "--stdin"}},
-		{"stdin and hash", []string{"claim", "--stdin", "--hash", validHash}},
-		{"all three", []string{"claim", "--file", "/tmp/f", "--stdin", "--hash", validHash}},
+		{"no source flags", []string{"claim"}, "file"},
+		{"file and hash", []string{"claim", "--file", "/tmp/f", "--hash", validHash}, "one"},
+		{"file and stdin", []string{"claim", "--file", "/tmp/f", "--stdin"}, "one"},
+		{"stdin and hash", []string{"claim", "--stdin", "--hash", validHash}, "one"},
+		{"all three", []string{"claim", "--file", "/tmp/f", "--stdin", "--hash", validHash}, "one"},
 	}
 
 	for _, tc := range cases {
@@ -566,6 +604,12 @@ func TestClaimSourceFlagExclusivity(t *testing.T) {
 			err := rootCmd.Execute()
 			if err == nil {
 				t.Fatalf("claim should reject %q", tc.name)
+			}
+			assertNotUnknownCommand(t, err)
+			// Verify the error is about source flag requirements, not an unknown command.
+			errStr := strings.ToLower(err.Error())
+			if !strings.Contains(errStr, tc.errContains) {
+				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.errContains)
 			}
 			if requestMade {
 				t.Errorf("claim made HTTP request for %q", tc.name)
@@ -763,6 +807,7 @@ func TestClaimHttpErrorMapping(t *testing.T) {
 			if err == nil {
 				t.Fatalf("claim should return error for HTTP %d", tc.status)
 			}
+			assertNotUnknownCommand(t, err)
 			if !strings.Contains(err.Error(), tc.errContains) {
 				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.errContains)
 			}
