@@ -87,6 +87,9 @@ func buildClaimsURL(org, bot string, page, limit int, order string) string {
 	return base + "?" + values.Encode()
 }
 
+// checkClaimsStatus is a custom status checker instead of newStatusChecker
+// because claims is a public endpoint — 401 should not map to
+// "authentication failed: signature rejected".
 func checkClaimsStatus(statusCode int, status string, body []byte) error {
 	switch statusCode {
 	case http.StatusNotFound:

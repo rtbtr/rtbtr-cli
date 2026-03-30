@@ -504,7 +504,7 @@ func TestClaimHashRejectsInvalid(t *testing.T) {
 		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", "too long", "hash"},
 		{base64.StdEncoding.EncodeToString(make([]byte, 32)), "standard base64 padding", "hash"},
 		{"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA!!!", "non-base64 chars", "hash"},
-		{base64.RawURLEncoding.EncodeToString(make([]byte, 16)), "wrong decoded size (16 bytes)", "hash"},
+		{base64.RawURLEncoding.EncodeToString(make([]byte, 16)), "too short (16-byte input encodes to 22 chars)", "hash"},
 	}
 
 	for _, tc := range cases {
