@@ -74,6 +74,15 @@ func setupClaimsServer(t *testing.T, status int, response string) (*httptest.Ser
 	return server, capture
 }
 
+// assertClaimsNotUnknownCommand fails the test if the error is an "unknown command"
+// error, which means the claims subcommand is not registered.
+func assertClaimsNotUnknownCommand(t *testing.T, err error) {
+	t.Helper()
+	if err != nil && strings.Contains(err.Error(), "unknown command") {
+		t.Fatalf("claims command is not registered: %v", err)
+	}
+}
+
 // T-CLS-01: claims is registered as a root subcommand and --help succeeds.
 func TestClaimsCommandHelp(t *testing.T) {
 	resetClaimsFlags()
@@ -98,15 +107,16 @@ func TestClaimsCommandHelp(t *testing.T) {
 // T-CLS-02: claims requires exactly one positional argument in org/bot format.
 func TestClaimsArgumentValidation(t *testing.T) {
 	cases := []struct {
-		name string
-		args []string
+		name        string
+		args        []string
+		errContains string
 	}{
-		{"missing arg", []string{"claims"}},
-		{"extra args", []string{"claims", "org/bot", "extra"}},
-		{"no slash", []string{"claims", "orgbot"}},
-		{"empty org", []string{"claims", "/bot"}},
-		{"empty bot", []string{"claims", "org/"}},
-		{"multiple slashes", []string{"claims", "a/b/c"}},
+		{"missing arg", []string{"claims"}, "org/bot"},
+		{"extra args", []string{"claims", "org/bot", "extra"}, "arg"},
+		{"no slash", []string{"claims", "orgbot"}, "org/bot"},
+		{"empty org", []string{"claims", "/bot"}, "org/bot"},
+		{"empty bot", []string{"claims", "org/"}, "org/bot"},
+		{"multiple slashes", []string{"claims", "a/b/c"}, "org/bot"},
 	}
 
 	for _, tc := range cases {
@@ -121,6 +131,12 @@ func TestClaimsArgumentValidation(t *testing.T) {
 			err := rootCmd.Execute()
 			if err == nil {
 				t.Fatalf("claims should reject %q", tc.name)
+			}
+			assertClaimsNotUnknownCommand(t, err)
+			// Verify the error mentions org/bot format or argument requirements.
+			errStr := strings.ToLower(err.Error())
+			if !strings.Contains(errStr, tc.errContains) {
+				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.errContains)
 			}
 		})
 	}
@@ -342,6 +358,7 @@ func TestClaimsHttpErrorMapping(t *testing.T) {
 			if err == nil {
 				t.Fatalf("claims should return error for HTTP %d", tc.status)
 			}
+			assertClaimsNotUnknownCommand(t, err)
 			if !strings.Contains(err.Error(), tc.errContains) {
 				t.Errorf("error = %q, want it to contain %q", err.Error(), tc.errContains)
 			}
@@ -367,8 +384,13 @@ func TestClaimsHttp401IsGeneric(t *testing.T) {
 	if err == nil {
 		t.Fatal("claims should return error for HTTP 401")
 	}
+	assertClaimsNotUnknownCommand(t, err)
 	// claims is a public endpoint - 401 should NOT map to "authentication failed: signature rejected"
 	if strings.Contains(err.Error(), "signature rejected") {
 		t.Errorf("error = %q, should not contain auth-specific wording for public endpoint", err.Error())
+	}
+	// Verify it uses the generic error prefix
+	if !strings.Contains(err.Error(), "claims failed") {
+		t.Errorf("error = %q, want it to contain 'claims failed'", err.Error())
 	}
 }
